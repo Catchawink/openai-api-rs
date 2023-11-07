@@ -1,3 +1,5 @@
+use std::str::Bytes;
+
 use crate::v1::audio::{
     AudioTranscriptionRequest, AudioTranscriptionResponse, AudioTranslationRequest,
     AudioTranslationResponse,
@@ -25,6 +27,11 @@ use crate::v1::image::{
 use crate::v1::moderation::{CreateModerationRequest, CreateModerationResponse};
 
 use minreq::Response;
+use async_channel::{Sender, Receiver, unbounded};
+use eventsource_stream::{Event, Eventsource, EventStream};
+use futures::stream::Map;
+use futures_util::{Stream, FutureExt, StreamExt, stream};
+use anyhow::{anyhow, Error};
 
 const API_URL_V1: &str = "https://api.openai.com/v1";
 
@@ -138,6 +145,44 @@ impl Client {
             }
             Err(e) => Err(self.new_error(e)),
         }
+    }
+
+    pub async fn stream<T1: serde::ser::Serialize + Send + Sync + 'static, T2: for<'a> serde::de::Deserialize<'a> + Send + Sync>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<T2, Error>>, Error> {
+        let (tx, rx) = unbounded::<Result<T2, APIError>>();
+        
+        let url = format!(
+            "{api_endpoint}{path}",
+            api_endpoint = self.api_endpoint,
+            path = path
+        );
+        
+        let api_key = self.api_key.clone();
+
+        let res = reqwest::Client::new().post(&url)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .header(reqwest::header::AUTHORIZATION, "Bearer ".to_owned() + &api_key)
+        .json(&params)
+        .send().await;
+        let stream = res.unwrap().bytes_stream().eventsource();
+        let map = stream.map(|x| {
+            match x {
+                Ok(x) => {
+                    let result = serde_json::from_str::<T2>(&x.data.clone());
+                    match result {
+                        Ok(result) => {
+                            Ok(result)
+                        },
+                        Err(err) => {
+                            Err(anyhow!(err))
+                        }
+                    }
+                }
+                Err(err) => {
+                    Err(anyhow!(err))
+                }
+            }
+        });
+        Ok(Box::new(map))
     }
 
     pub fn completion(&self, req: CompletionRequest) -> Result<CompletionResponse, APIError> {
@@ -261,6 +306,14 @@ impl Client {
             Ok(r) => Ok(r),
             Err(e) => Err(self.new_error(e)),
         }
+    }
+
+    pub async fn chat_completion_stream(
+        &self,
+        req: ChatCompletionRequest,
+    ) -> Result<impl Stream<Item = Result<ChatCompletionResponse, Error>>, Error> {
+        //self.stream("/chat/completions", req).await
+        self.stream("/chat/completions", req).await
     }
 
     pub fn audio_transcription(
