@@ -112,7 +112,7 @@ pub enum MessageRole {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ChatCompletionMessage {
-    pub role: MessageRole,
+    pub role: Option<MessageRole>,
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,

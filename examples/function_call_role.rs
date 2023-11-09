@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let req = ChatCompletionRequest::new(
         chat_completion::GPT3_5_TURBO_0613.to_string(),
         vec![chat_completion::ChatCompletionMessage {
-            role: chat_completion::MessageRole::user,
+            role: Some(chat_completion::MessageRole::user),
             content: String::from("What is the price of Ethereum?"),
             name: None,
             function_call: None,
@@ -75,13 +75,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 chat_completion::GPT3_5_TURBO_0613.to_string(),
                 vec![
                     chat_completion::ChatCompletionMessage {
-                        role: chat_completion::MessageRole::user,
+                        role: Some(chat_completion::MessageRole::user),
                         content: String::from("What is the price of Ethereum?"),
                         name: None,
                         function_call: None,
                     },
                     chat_completion::ChatCompletionMessage {
-                        role: chat_completion::MessageRole::function,
+                        role: Some(chat_completion::MessageRole::function),
                         content: {
                             let price = get_coin_price(&coin);
                             format!("{{\"price\": {}}}", price)

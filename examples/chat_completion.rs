@@ -8,7 +8,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let req = ChatCompletionRequest::new(
         chat_completion::GPT4.to_string(),
         vec![chat_completion::ChatCompletionMessage {
-            role: chat_completion::MessageRole::user,
+            role: Some(chat_completion::MessageRole::user),
             content: String::from("What is Bitcoin?"),
             name: None,
             function_call: None,
