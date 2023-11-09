@@ -30,7 +30,7 @@ use minreq::Response;
 use async_channel::{Sender, Receiver, unbounded};
 use eventsource_stream::{Event, Eventsource, EventStream};
 use futures::stream::Map;
-use futures_util::{Stream, FutureExt, StreamExt, stream};
+use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
 use anyhow::{anyhow, Error};
 
 const API_URL_V1: &str = "https://api.openai.com/v1";
@@ -159,6 +159,7 @@ impl Client {
         let api_key = self.api_key.clone();
 
         println!("{}", url.clone());
+        println!("{}", api_key.clone());
 
         let res = reqwest::Client::new().post(&url)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -172,6 +173,9 @@ impl Client {
             match x {
                 Ok(x) => {
                     println!("GOT EVENT");
+
+                    Err(anyhow!(x.data.clone()))
+                    /*
                     let result = serde_json::from_str::<T2>(&x.data.clone());
                     match result {
                         Ok(result) => {
@@ -182,6 +186,7 @@ impl Client {
                             Err(anyhow!(err))
                         }
                     }
+                     */
                 }
                 Err(err) => {
                     panic!("{}", err);
