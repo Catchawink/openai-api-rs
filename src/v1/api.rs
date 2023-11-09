@@ -351,7 +351,7 @@ impl Client {
                                 Ok(result)
                             },
                             Err(err) => {
-                                Err(anyhow!(err))
+                                Err(anyhow!(format!("Error parsing:\n\n{}\n\n{}", data.clone(), err)))
                             }
                         }
                     } else {
