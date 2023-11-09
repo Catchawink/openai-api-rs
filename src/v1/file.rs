@@ -16,7 +16,7 @@ pub struct FileListResponse {
     pub data: Vec<FileData>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct FileUploadRequest {
     pub file: String,
     pub purpose: String,
@@ -38,7 +38,7 @@ pub struct FileUploadResponse {
     pub purpose: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct FileDeleteRequest {
     pub file_id: String,
 }
@@ -56,7 +56,7 @@ pub struct FileDeleteResponse {
     pub delete: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct FileRetrieveRequest {
     pub file_id: String,
 }
@@ -77,7 +77,7 @@ pub struct FileRetrieveResponse {
     pub purpose: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct FileRetrieveContentRequest {
     pub file_id: String,
 }

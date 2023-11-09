@@ -26,14 +26,14 @@ pub const GPT4_32K_0613: &str = "gpt-4-32k-0613";
 pub const GPT4_0314: &str = "gpt-4-0314";
 pub const GPT4_32K_0314: &str = "gpt-4-32k-0314";
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub enum FunctionCallType {
     None,
     Auto,
     Function { name: String },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct ChatCompletionRequest {
     pub model: String,
     pub messages: Vec<ChatCompletionMessage>,
