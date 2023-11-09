@@ -147,7 +147,7 @@ impl Client {
         }
     }
 
-    pub async fn stream<T1: serde::ser::Serialize + Send + Sync + 'static, T2: for<'a> serde::de::Deserialize<'a> + Send + Sync>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<T2, Error>>, Error> {
+    pub async fn event_stream<T1: serde::ser::Serialize + Send + Sync + 'static>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<Event, Error>>, Error> {
         //let (tx, rx) = unbounded::<Result<T2, APIError>>();
         
         let url = format!(
@@ -167,33 +167,44 @@ impl Client {
         .json(&params)
         .send().await?;
 
-        //println!("{}", res.text().await?); 
-        
-        let mut stream = res.bytes_stream().eventsource();
+        let stream = res.bytes_stream().eventsource();
+
+        let stream = stream.map(|x| {
+            match x {
+                Ok(x) => {
+                    Ok(x)
+                }
+                Err(err) => {
+                    Err(anyhow!(err))
+                }
+            }
+        });
+
+        Ok(Box::new(stream))
+    }
+
+    pub async fn stream<T1: serde::ser::Serialize + Send + Sync + 'static, T2: for<'a> serde::de::Deserialize<'a> + Send + Sync>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<T2, Error>>, Error> {
+
+        let stream = self.event_stream(path, params).await?;
 
         let map = stream.map(|x| {
             match x {
                 Ok(x) => {
-                    //panic!("GOT EVENT");
-
                     let result = serde_json::from_str::<T2>(&x.data.clone());
                     match result {
                         Ok(result) => {
                             Ok(result)
                         },
                         Err(err) => {
-                            //panic!("{}", err);
                             Err(anyhow!(err))
                         }
                     }
                 }
                 Err(err) => {
-                    //panic!("{}", err);
                     Err(anyhow!(err))
                 }
             }
         });
-         
 
         Ok(Box::new(map))
     }
@@ -326,7 +337,33 @@ impl Client {
         req: ChatCompletionRequest,
     ) -> Result<impl Stream<Item = Result<ChatCompletionResponse, Error>>, Error> {
         //self.stream("/chat/completions", req).await
-        self.stream("/chat/completions", req).await
+        let stream = self.event_stream("/chat/completions", req).await?;
+        let stream = stream.map(|x| {
+            match x {
+                Ok(x) => {
+                    let data = x.data.clone();
+                    if data == "[DONE]" {
+                        Err(anyhow!("Stream ended."))
+                    } else if data.clone().starts_with("{") {
+                        let result = serde_json::from_str::<ChatCompletionResponse>(&data.clone());
+                        match result {
+                            Ok(result) => {
+                                Ok(result)
+                            },
+                            Err(err) => {
+                                Err(anyhow!(err))
+                            }
+                        }
+                    } else {
+                        Err(anyhow!("Invalid result!"))
+                    }
+                }
+                Err(err) => {
+                    Err(anyhow!(err))
+                }
+            }
+        });
+        Ok(stream)
     }
 
     pub fn audio_transcription(
