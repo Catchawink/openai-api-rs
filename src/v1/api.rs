@@ -168,6 +168,7 @@ impl Client {
         let map = stream.map(|x| {
             match x {
                 Ok(x) => {
+                    println!("GOT EVENT");
                     let result = serde_json::from_str::<T2>(&x.data.clone());
                     match result {
                         Ok(result) => {
