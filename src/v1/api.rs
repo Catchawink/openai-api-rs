@@ -165,10 +165,14 @@ impl Client {
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .header(reqwest::header::AUTHORIZATION, "Bearer ".to_owned() + &api_key)
         .json(&params)
-        .send().await;
+        .send().await?;
     
-        let stream = res.unwrap().bytes_stream().eventsource();
-        
+        let mut stream = res.bytes_stream().eventsource();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.unwrap().data;
+            println!("{}", chunk);
+        }
+
         let map = stream.map(|x| {
             match x {
                 Ok(x) => {
