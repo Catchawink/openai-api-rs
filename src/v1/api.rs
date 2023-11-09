@@ -166,6 +166,14 @@ impl Client {
         .header(reqwest::header::AUTHORIZATION, "Bearer ".to_owned() + &api_key)
         .json(&params)
         .send().await?;
+
+        println!("{}", res.text().await?); 
+    
+        let res = reqwest::Client::new().post(&url)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .header(reqwest::header::AUTHORIZATION, "Bearer ".to_owned() + &api_key)
+        .json(&params)
+        .send().await?;
     
         let mut stream = res.bytes_stream().eventsource();
         while let Some(chunk) = stream.next().await {
@@ -198,6 +206,8 @@ impl Client {
                 }
             }
         });
+         
+
         Ok(Box::new(map))
     }
 
