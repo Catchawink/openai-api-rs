@@ -146,7 +146,7 @@ pub struct ChatCompletionResponse {
     pub created: i64,
     pub model: String,
     pub choices: Vec<ChatCompletionChoice>,
-    pub usage: common::Usage,
+    pub usage: Option<common::Usage>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
