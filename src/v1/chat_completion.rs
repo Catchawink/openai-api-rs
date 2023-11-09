@@ -134,8 +134,8 @@ pub struct ChatCompletionMessageForResponse {
 #[derive(Debug, Deserialize, Clone)]
 pub struct ChatCompletionChoice {
     pub index: i64,
-    pub message: ChatCompletionMessageForResponse,
-    pub finish_reason: FinishReason,
+    pub message: Option<ChatCompletionMessageForResponse>,
+    pub finish_reason: Option<FinishReason>,
     pub delta: ChatCompletionMessageForResponse
 }
 

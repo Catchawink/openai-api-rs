@@ -55,10 +55,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let result = client.chat_completion(req)?;
 
-    match result.choices[0].finish_reason {
+    match result.choices[0].finish_reason.clone().unwrap() {
         chat_completion::FinishReason::stop => {
             println!("Stop");
-            println!("{:?}", result.choices[0].message.content);
+            println!("{:?}", result.choices[0].message.clone().unwrap().content);
         }
         chat_completion::FinishReason::length => {
             println!("Length");
@@ -69,7 +69,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             struct Currency {
                 coin: String,
             }
-            let function_call = result.choices[0].message.function_call.as_ref().unwrap();
+            let message = result.choices[0].message.clone();
+            let message = message.unwrap();
+            let function_call = message.function_call.as_ref().unwrap();
             let name = function_call.name.clone().unwrap();
             let arguments = function_call.arguments.clone().unwrap();
             let c: Currency = serde_json::from_str(&arguments)?;
