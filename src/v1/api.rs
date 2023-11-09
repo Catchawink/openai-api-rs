@@ -167,41 +167,28 @@ impl Client {
         .json(&params)
         .send().await?;
 
-        println!("{}", res.text().await?); 
-    
-        let res = reqwest::Client::new().post(&url)
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .header(reqwest::header::AUTHORIZATION, "Bearer ".to_owned() + &api_key)
-        .json(&params)
-        .send().await?;
-    
+        //println!("{}", res.text().await?); 
+        
         let mut stream = res.bytes_stream().eventsource();
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.unwrap().data;
-            println!("{}", chunk);
-        }
 
         let map = stream.map(|x| {
             match x {
                 Ok(x) => {
-                    panic!("GOT EVENT");
+                    //panic!("GOT EVENT");
 
-                    Err(anyhow!(x.data.clone()))
-                    /*
                     let result = serde_json::from_str::<T2>(&x.data.clone());
                     match result {
                         Ok(result) => {
                             Ok(result)
                         },
                         Err(err) => {
-                            panic!("{}", err);
+                            //panic!("{}", err);
                             Err(anyhow!(err))
                         }
                     }
-                     */
                 }
                 Err(err) => {
-                    panic!("{}", err);
+                    //panic!("{}", err);
                     Err(anyhow!(err))
                 }
             }
