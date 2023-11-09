@@ -163,6 +163,7 @@ impl Client {
         .header(reqwest::header::AUTHORIZATION, "Bearer ".to_owned() + &api_key)
         .json(&params)
         .send().await;
+    
         let stream = res.unwrap().bytes_stream().eventsource();
         let map = stream.map(|x| {
             match x {
@@ -173,11 +174,13 @@ impl Client {
                             Ok(result)
                         },
                         Err(err) => {
+                            println!("{}", err);
                             Err(anyhow!(err))
                         }
                     }
                 }
                 Err(err) => {
+                    println!("{}", err);
                     Err(anyhow!(err))
                 }
             }
