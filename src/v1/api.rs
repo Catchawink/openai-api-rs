@@ -172,7 +172,7 @@ impl Client {
         let map = stream.map(|x| {
             match x {
                 Ok(x) => {
-                    println!("GOT EVENT");
+                    panic!("GOT EVENT");
 
                     Err(anyhow!(x.data.clone()))
                     /*
