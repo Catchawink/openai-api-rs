@@ -148,7 +148,7 @@ impl Client {
     }
 
     pub async fn stream<T1: serde::ser::Serialize + Send + Sync + 'static, T2: for<'a> serde::de::Deserialize<'a> + Send + Sync>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<T2, Error>>, Error> {
-        let (tx, rx) = unbounded::<Result<T2, APIError>>();
+        //let (tx, rx) = unbounded::<Result<T2, APIError>>();
         
         let url = format!(
             "{api_endpoint}{path}",
@@ -158,6 +158,8 @@ impl Client {
         
         let api_key = self.api_key.clone();
 
+        println!("{}", url.clone());
+
         let res = reqwest::Client::new().post(&url)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .header(reqwest::header::AUTHORIZATION, "Bearer ".to_owned() + &api_key)
@@ -165,6 +167,7 @@ impl Client {
         .send().await;
     
         let stream = res.unwrap().bytes_stream().eventsource();
+        
         let map = stream.map(|x| {
             match x {
                 Ok(x) => {
@@ -175,13 +178,13 @@ impl Client {
                             Ok(result)
                         },
                         Err(err) => {
-                            println!("{}", err);
+                            panic!("{}", err);
                             Err(anyhow!(err))
                         }
                     }
                 }
                 Err(err) => {
-                    println!("{}", err);
+                    panic!("{}", err);
                     Err(anyhow!(err))
                 }
             }
