@@ -3,7 +3,7 @@ use std::option::Option;
 
 use crate::impl_builder_methods;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ImageData {
     pub url: String,
 }
@@ -41,7 +41,7 @@ impl_builder_methods!(
     user: String
 );
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ImageGenerationResponse {
     pub created: i64,
     pub data: Vec<ImageData>,
@@ -86,7 +86,7 @@ impl_builder_methods!(
     user: String
 );
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ImageEditResponse {
     pub created: i64,
     pub data: Vec<ImageData>,
@@ -125,7 +125,7 @@ impl_builder_methods!(
     user: String
 );
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ImageVariationResponse {
     pub created: i64,
     pub data: Vec<ImageData>,

@@ -120,7 +120,7 @@ pub struct ChatCompletionMessage {
     pub function_call: Option<FunctionCall>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ChatCompletionMessageForResponse {
     pub role: MessageRole,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -131,7 +131,7 @@ pub struct ChatCompletionMessageForResponse {
     pub function_call: Option<FunctionCall>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ChatCompletionChoice {
     pub index: i64,
     pub message: ChatCompletionMessageForResponse,
@@ -139,7 +139,7 @@ pub struct ChatCompletionChoice {
     pub delta: ChatCompletionMessageForResponse
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ChatCompletionResponse {
     pub id: String,
     pub object: String,
@@ -149,7 +149,7 @@ pub struct ChatCompletionResponse {
     pub usage: common::Usage,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Function {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -157,7 +157,7 @@ pub struct Function {
     pub parameters: FunctionParameters,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum JSONSchemaType {
     Object,
@@ -168,7 +168,7 @@ pub enum JSONSchemaType {
     Boolean,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JSONSchemaDefine {
     #[serde(rename = "type")]
     pub schema_type: Option<JSONSchemaType>,
@@ -184,7 +184,7 @@ pub struct JSONSchemaDefine {
     pub items: Option<Box<JSONSchemaDefine>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FunctionParameters {
     #[serde(rename = "type")]
     pub schema_type: JSONSchemaType,
@@ -194,7 +194,7 @@ pub struct FunctionParameters {
     pub required: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[allow(non_camel_case_types)]
 pub enum FinishReason {
     stop,

@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Usage {
     pub prompt_tokens: i32,
     pub completion_tokens: i32,

@@ -39,7 +39,7 @@ impl_builder_methods!(
     language: String
 );
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct AudioTranscriptionResponse {
     pub text: String,
 }
@@ -75,7 +75,7 @@ impl_builder_methods!(
     temperature: f32
 );
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct AudioTranslationResponse {
     pub text: String,
 }

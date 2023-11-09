@@ -63,7 +63,7 @@ impl_builder_methods!(
     suffix: String
 );
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct CreateFineTuneResponse {
     pub id: String,
     pub object: String,
@@ -80,7 +80,7 @@ pub struct CreateFineTuneResponse {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct FineTuneEvent {
     pub object: String,
     pub created_at: i64,
@@ -88,14 +88,14 @@ pub struct FineTuneEvent {
     pub message: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct FineTunedModel {
     pub id: String,
     pub object: String,
     pub model_details: ModelDetails,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ModelDetails {
     pub architecture: String,
     pub created_at: i64,
@@ -105,7 +105,7 @@ pub struct ModelDetails {
     pub samples_seen: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct HyperParams {
     pub batch_size: i32,
     pub learning_rate_multiplier: f32,
@@ -113,7 +113,7 @@ pub struct HyperParams {
     pub prompt_loss_weight: f32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ResultFile {
     pub id: String,
     pub object: String,
@@ -123,7 +123,7 @@ pub struct ResultFile {
     pub purpose: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ValidationFile {
     pub id: String,
     pub object: String,
@@ -133,7 +133,7 @@ pub struct ValidationFile {
     pub purpose: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct TrainingFile {
     pub id: String,
     pub object: String,
@@ -143,13 +143,13 @@ pub struct TrainingFile {
     pub purpose: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ListFineTuneResponse {
     pub object: String,
     pub data: Vec<FineTuneData>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct FineTuneData {
     pub id: String,
     pub object: String,
@@ -165,7 +165,7 @@ pub struct FineTuneData {
     pub updated_at: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RetrieveFineTuneRequest {
     pub fine_tune_id: String,
 }
@@ -176,7 +176,7 @@ impl RetrieveFineTuneRequest {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RetrieveFineTuneResponse {
     pub id: String,
     pub object: String,
@@ -204,7 +204,7 @@ impl CancelFineTuneRequest {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct CancelFineTuneResponse {
     pub id: String,
     pub object: String,
@@ -221,7 +221,7 @@ pub struct CancelFineTuneResponse {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ListFineTuneEventsRequest {
     pub fine_tune_id: String,
 }
@@ -232,13 +232,13 @@ impl ListFineTuneEventsRequest {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ListFineTuneEventsResponse {
     pub object: String,
     pub data: Vec<FineTuneEvent>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct DeleteFineTuneModelRequest {
     pub model_id: String,
 }
@@ -249,7 +249,7 @@ impl DeleteFineTuneModelRequest {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct DeleteFineTuneModelResponse {
     pub id: String,
     pub object: String,
