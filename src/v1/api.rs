@@ -31,9 +31,10 @@ use async_channel::{Sender, Receiver, unbounded};
 use eventsource_stream::{Event, Eventsource, EventStream};
 use futures::stream::Map;
 use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
-use anyhow::{anyhow, Error};
+use anyhow::{anyhow, Result, Error};
 
 use super::chat_completion::{ChatCompletionChoice, FinishReason, ChatCompletionMessageForResponse};
+use serde_json::Value;
 
 const API_URL_V1: &str = "https://api.openai.com/v1";
 
@@ -391,7 +392,7 @@ impl Client {
         });
         Ok(stream)
     }
-
+    
     pub fn audio_transcription(
         &self,
         req: AudioTranscriptionRequest,
