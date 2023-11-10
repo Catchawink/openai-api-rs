@@ -33,6 +33,8 @@ use futures::stream::Map;
 use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
 use anyhow::{anyhow, Error};
 
+use super::chat_completion::{ChatCompletionChoice, FinishReason, ChatCompletionMessageForResponse};
+
 const API_URL_V1: &str = "https://api.openai.com/v1";
 
 pub struct Client {
@@ -343,7 +345,31 @@ impl Client {
                 Ok(x) => {
                     let data = x.data.clone();
                     if data == "[DONE]" {
-                        Err(anyhow!("Stream ended."))
+                        Ok(ChatCompletionResponse {
+                            id: "".to_string(),
+                            object: "".to_string(),
+                            created: 0,
+                            model: "".to_string(),
+                            choices: vec![
+                                ChatCompletionChoice {
+                                    index: 0,
+                                    message: Some(ChatCompletionMessageForResponse {
+                                        content: Some("".to_string()),
+                                        function_call: None,
+                                        name: None,
+                                        role: None
+                                    }),
+                                    finish_reason: Some(FinishReason::stop),
+                                    delta: ChatCompletionMessageForResponse {
+                                        content: Some("".to_string()),
+                                        function_call: None,
+                                        name: None,
+                                        role: None
+                                    }
+                                }
+                            ],
+                            usage: None,
+                        })
                     } else if data.clone().starts_with("{") {
                         let result = serde_json::from_str::<ChatCompletionResponse>(&data.clone());
                         match result {
