@@ -422,7 +422,7 @@ impl Client {
         Ok(stream)
     }
 
-    pub async fn create_speech(
+    pub fn create_speech(
         &self,
         req: AudioSpeechRequest,
     ) -> Result<Bytes> {
