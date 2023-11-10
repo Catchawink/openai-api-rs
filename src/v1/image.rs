@@ -11,6 +11,7 @@ pub struct ImageData {
 #[derive(Debug, Serialize, Clone)]
 pub struct ImageGenerationRequest {
     pub prompt: String,
+    pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub n: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -25,6 +26,7 @@ impl ImageGenerationRequest {
     pub fn new(prompt: String) -> Self {
         Self {
             prompt,
+            model: "dall-e-3".to_string(),
             n: None,
             size: None,
             response_format: None,
