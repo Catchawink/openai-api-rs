@@ -32,6 +32,7 @@ use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
 use anyhow::{anyhow, Result, Error};
 use bytes::Bytes;
 
+use super::audio::AudioSpeechRequest;
 use super::chat_completion::{ChatCompletionChoice, FinishReason, ChatCompletionMessageForResponse};
 use serde_json::Value;
 
@@ -170,7 +171,7 @@ impl Client {
         .send().await?;
 
         let stream = res.bytes_stream();
-        
+
         let stream = stream.map(|x| {
             match x {
                 Ok(x) => {
@@ -414,9 +415,9 @@ impl Client {
     
     pub async fn audio_speech(
         &self,
-        req: AudioTranscriptionRequest,
+        req: AudioSpeechRequest,
     ) -> Result<impl Stream<Item = Result<Bytes, Error>>> {
-        let stream = self.byte_stream("/audio/transcriptions", req).await?;
+        let stream = self.byte_stream("/audio/speech", req).await?;
         Ok(stream)
     }
 
