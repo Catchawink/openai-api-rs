@@ -413,12 +413,22 @@ impl Client {
         Ok(stream)
     }
     
-    pub async fn audio_speech(
+    // TODO: Test
+    pub async fn create_speech_stream(
         &self,
         req: AudioSpeechRequest,
     ) -> Result<impl Stream<Item = Result<Bytes, Error>>> {
         let stream = self.byte_stream("/audio/speech", req).await?;
         Ok(stream)
+    }
+
+    pub async fn create_speech(
+        &self,
+        req: AudioSpeechRequest,
+    ) -> Result<Bytes> {
+        let res = self.post("/audio/speech", &req)?;
+        let r = res.into_bytes();
+        Ok(Bytes::from(r))
     }
 
     pub fn audio_transcription(
