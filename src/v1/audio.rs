@@ -5,6 +5,35 @@ use crate::impl_builder_methods;
 pub const WHISPER_1: &str = "whisper-1";
 
 #[derive(Debug, Serialize, Clone)]
+pub struct AudioSpeechRequest {
+    pub model: String,
+    pub input: String,
+    pub voice: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f32>,
+}
+
+impl AudioSpeechRequest {
+    pub fn new(model: String, input: String, voice: String) -> Self {
+        Self {
+            model,
+            input,
+            voice,
+            response_format: None,
+            speed: None,
+        }
+    }
+}
+
+impl_builder_methods!(
+    AudioSpeechRequest,
+    response_format: String,
+    speed: f32
+);
+
+#[derive(Debug, Serialize, Clone)]
 pub struct AudioTranscriptionRequest {
     pub file: String,
     pub model: String,

@@ -1,5 +1,3 @@
-use std::str::Bytes;
-
 use crate::v1::audio::{
     AudioTranscriptionRequest, AudioTranscriptionResponse, AudioTranslationRequest,
     AudioTranslationResponse,
@@ -32,6 +30,7 @@ use eventsource_stream::{Event, Eventsource, EventStream};
 use futures::stream::Map;
 use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
 use anyhow::{anyhow, Result, Error};
+use bytes::Bytes;
 
 use super::chat_completion::{ChatCompletionChoice, FinishReason, ChatCompletionMessageForResponse};
 use serde_json::Value;
@@ -150,7 +149,7 @@ impl Client {
         }
     }
 
-    pub async fn event_stream<T1: serde::ser::Serialize + Send + Sync + 'static>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<Event, Error>>, Error> {
+    pub async fn byte_stream<T1: serde::ser::Serialize + Send + Sync + 'static>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<Bytes>>, Error> {
         //let (tx, rx) = unbounded::<Result<T2, APIError>>();
         
         let url = format!(
@@ -170,7 +169,27 @@ impl Client {
         .json(&params)
         .send().await?;
 
-        let stream = res.bytes_stream().eventsource();
+        let stream = res.bytes_stream();
+        
+        let stream = stream.map(|x| {
+            match x {
+                Ok(x) => {
+                    Ok(x)
+                }
+                Err(err) => {
+                    Err(anyhow!(err))
+                }
+            }
+        });
+
+        Ok(Box::new(stream))
+    }
+
+    pub async fn event_stream<T1: serde::ser::Serialize + Send + Sync + 'static>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<Event, Error>>, Error> {
+
+        let byte_stream = self.byte_stream(path, params).await?;
+
+        let stream = byte_stream.eventsource();
 
         let stream = stream.map(|x| {
             match x {
@@ -393,6 +412,14 @@ impl Client {
         Ok(stream)
     }
     
+    pub async fn audio_speech(
+        &self,
+        req: AudioTranscriptionRequest,
+    ) -> Result<impl Stream<Item = Result<Bytes, Error>>> {
+        let stream = self.byte_stream("/audio/transcriptions", req).await?;
+        Ok(stream)
+    }
+
     pub fn audio_transcription(
         &self,
         req: AudioTranscriptionRequest,

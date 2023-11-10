@@ -1,0 +1,41 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Server",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--package=server",
+                    "--bin=server"
+                ],
+                "filter": {
+                    "name": "server",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}/server"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Client",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--package=client",
+                    "--bin=client"
+                ],
+                "filter": {
+                    "name": "client",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}/client"
+        }
+    ]
+}
