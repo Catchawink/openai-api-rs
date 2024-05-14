@@ -26,6 +26,8 @@ pub const GPT4_32K_0613: &str = "gpt-4-32k-0613";
 pub const GPT4_0314: &str = "gpt-4-0314";
 pub const GPT4_32K_0314: &str = "gpt-4-32k-0314";
 
+pub const GPT_40: &str = "gpt-4o";
+
 #[derive(Debug, Serialize)]
 pub enum FunctionCallType {
     None,
