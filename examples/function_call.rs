@@ -62,7 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some(chat_completion::FinishReason::stop) => {
             println!("Stop");
-            println!("{:?}", result.choices[0].message.clone().unwrap().content);
+            println!("{:?}", result.choices[0].message.content);
         }
         Some(chat_completion::FinishReason::length) => {
             println!("Length");

@@ -44,8 +44,8 @@ use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
 use anyhow::{anyhow, Result, Error};
 use bytes::Bytes;
 
-use super::audio::AudioSpeechRequest;
 use super::chat_completion::{ChatCompletionChoice, FinishReason, ChatCompletionMessageForResponse};
+use super::common::Usage;
 use serde_json::Value;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
@@ -441,22 +441,23 @@ impl Client {
                             choices: vec![
                                 ChatCompletionChoice {
                                     index: 0,
-                                    message: Some(ChatCompletionMessageForResponse {
+                                    message: ChatCompletionMessageForResponse {
                                         content: Some("".to_string()),
-                                        function_call: None,
                                         name: None,
-                                        role: None
-                                    }),
+                                        role: None,
+                                        tool_calls: None
+                                    },
                                     finish_reason: Some(FinishReason::stop),
-                                    delta: ChatCompletionMessageForResponse {
-                                        content: Some("".to_string()),
-                                        function_call: None,
-                                        name: None,
-                                        role: None
-                                    }
+                                    finish_details: None
                                 }
                             ],
-                            usage: None,
+                            usage: Usage {
+                                prompt_tokens: 0,
+                                completion_tokens: 0,
+                                total_tokens: 0,
+                            },
+                            system_fingerprint: None,
+                            headers: None,
                         })
                     } else if data.clone().starts_with("{") {
                         let result = serde_json::from_str::<ChatCompletionResponse>(&data.clone());

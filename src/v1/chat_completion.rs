@@ -6,8 +6,6 @@ use std::collections::HashMap;
 use crate::impl_builder_methods;
 use crate::v1::common;
 
-#[derive(Debug, Serialize, Clone)]
-pub enum FunctionCallType {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum ToolChoiceType {
     None,

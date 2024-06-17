@@ -12,7 +12,6 @@ pub struct ImageData {
 #[derive(Debug, Serialize, Clone)]
 pub struct ImageGenerationRequest {
     pub prompt: String,
-    pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
