@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::option::Option;
 
 use crate::impl_builder_methods;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ImageData {
     pub url: String,
 }
@@ -12,6 +13,8 @@ pub struct ImageData {
 pub struct ImageGenerationRequest {
     pub prompt: String,
     pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub n: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -26,7 +29,7 @@ impl ImageGenerationRequest {
     pub fn new(prompt: String) -> Self {
         Self {
             prompt,
-            model: "dall-e-3".to_string(),
+            model: None,
             n: None,
             size: None,
             response_format: None,
@@ -37,16 +40,18 @@ impl ImageGenerationRequest {
 
 impl_builder_methods!(
     ImageGenerationRequest,
+    model: String,
     n: i32,
     size: String,
     response_format: String,
     user: String
 );
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ImageGenerationResponse {
     pub created: i64,
     pub data: Vec<ImageData>,
+    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -55,6 +60,8 @@ pub struct ImageEditRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mask: Option<String>,
     pub prompt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub n: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,6 +78,7 @@ impl ImageEditRequest {
             image,
             prompt,
             mask: None,
+            model: None,
             n: None,
             size: None,
             response_format: None,
@@ -82,16 +90,18 @@ impl ImageEditRequest {
 impl_builder_methods!(
     ImageEditRequest,
     mask: String,
+    model: String,
     n: i32,
     size: String,
     response_format: String,
     user: String
 );
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ImageEditResponse {
     pub created: i64,
     pub data: Vec<ImageData>,
+    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -99,6 +109,8 @@ pub struct ImageVariationRequest {
     pub image: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub n: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -111,6 +123,7 @@ impl ImageVariationRequest {
     pub fn new(image: String) -> Self {
         Self {
             image,
+            model: None,
             n: None,
             size: None,
             response_format: None,
@@ -121,14 +134,16 @@ impl ImageVariationRequest {
 
 impl_builder_methods!(
     ImageVariationRequest,
+    model: String,
     n: i32,
     size: String,
     response_format: String,
     user: String
 );
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ImageVariationResponse {
     pub created: i64,
     pub data: Vec<ImageData>,
+    pub headers: Option<HashMap<String, String>>,
 }

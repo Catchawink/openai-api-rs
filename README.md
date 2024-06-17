@@ -7,7 +7,7 @@ Check out the [docs.rs](https://docs.rs/openai-api-rs/).
 Cargo.toml
 ```toml
 [dependencies]
-openai-api-rs = "2.0.3"
+openai-api-rs = "4.0.9"
 ```
 
 ## Usage
@@ -18,55 +18,57 @@ The library needs to be configured with your account's secret key, which is avai
 $ export OPENAI_API_KEY=sk-xxxxxxx
 ```
 
-### Set OPENAI_API_BASE to environment variable (optional)
-```bash
-$ export OPENAI_API_BASE=https://api.openai.com/v1
-```
-
 ### Create client
 ```rust
-use openai_api_rs::v1::api::Client;
-use std::env;
 let client = Client::new(env::var("OPENAI_API_KEY").unwrap().to_string());
 ```
 
 ### Create request
 ```rust
-use openai_api_rs::v1::chat_completion::{self, ChatCompletionRequest};
 let req = ChatCompletionRequest::new(
-    chat_completion::GPT4.to_string(),
+    GPT4_O.to_string(),
     vec![chat_completion::ChatCompletionMessage {
         role: chat_completion::MessageRole::user,
-        content: String::from("Hello OpenAI!"),
+        content: chat_completion::Content::Text(String::from("What is bitcoin?")),
+        name: None,
     }],
 );
 ```
 
 ### Send request
 ```rust
-let result = client.completion(req)?;
-println!("{:?}", result.choices[0].text);
+let result = client.chat_completion(req)?;
+println!("Content: {:?}", result.choices[0].message.content);
+```
+
+### Set OPENAI_API_BASE to environment variable (optional)
+```bash
+$ export OPENAI_API_BASE=https://api.openai.com/v1
 ```
 
 ## Example of chat completion
 ```rust
 use openai_api_rs::v1::api::Client;
 use openai_api_rs::v1::chat_completion::{self, ChatCompletionRequest};
+use openai_api_rs::v1::common::GPT4_O;
 use std::env;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new(env::var("OPENAI_API_KEY").unwrap().to_string());
+
     let req = ChatCompletionRequest::new(
-        chat_completion::GPT4.to_string(),
+        GPT4_O.to_string(),
         vec![chat_completion::ChatCompletionMessage {
             role: chat_completion::MessageRole::user,
-            content: String::from("What is Bitcoin?"),
+            content: chat_completion::Content::Text(String::from("What is bitcoin?")),
             name: None,
-            function_call: None,
         }],
     );
+
     let result = client.chat_completion(req)?;
-    println!("{:?}", result.choices[0].message.content);
+    println!("Content: {:?}", result.choices[0].message.content);
+    println!("Response Headers: {:?}", result.headers);
+
     Ok(())
 }
 ```
@@ -82,9 +84,10 @@ Check out the [full API documentation](https://platform.openai.com/docs/api-refe
 - [x] [Embeddings](https://platform.openai.com/docs/api-reference/embeddings)
 - [x] [Audio](https://platform.openai.com/docs/api-reference/audio)
 - [x] [Files](https://platform.openai.com/docs/api-reference/files)
-- [x] [Fine-tunes](https://platform.openai.com/docs/api-reference/fine-tunes)
+- [x] [Fine-tuning](https://platform.openai.com/docs/api-reference/fine-tuning)
 - [x] [Moderations](https://platform.openai.com/docs/api-reference/moderations)
 - [x] [Function calling](https://platform.openai.com/docs/guides/gpt/function-calling)
+- [x] [Assistants](https://platform.openai.com/docs/assistants/overview)
 
 ## License
 This project is licensed under [MIT license](https://github.com/dongri/openai-api-rs/blob/main/LICENSE).

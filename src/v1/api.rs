@@ -1,6 +1,10 @@
+use crate::v1::assistant::{
+    AssistantFileObject, AssistantFileRequest, AssistantObject, AssistantRequest, DeletionStatus,
+    ListAssistant, ListAssistantFile,
+};
 use crate::v1::audio::{
-    AudioTranscriptionRequest, AudioTranscriptionResponse, AudioTranslationRequest,
-    AudioTranslationResponse,
+    AudioSpeechRequest, AudioSpeechResponse, AudioTranscriptionRequest, AudioTranscriptionResponse,
+    AudioTranslationRequest, AudioTranslationResponse,
 };
 use crate::v1::chat_completion::{ChatCompletionRequest, ChatCompletionResponse};
 use crate::v1::completion::{CompletionRequest, CompletionResponse};
@@ -12,17 +16,25 @@ use crate::v1::file::{
     FileRetrieveContentResponse, FileRetrieveRequest, FileRetrieveResponse, FileUploadRequest,
     FileUploadResponse,
 };
-use crate::v1::fine_tune::{
-    CancelFineTuneRequest, CancelFineTuneResponse, CreateFineTuneRequest, CreateFineTuneResponse,
-    DeleteFineTuneModelRequest, DeleteFineTuneModelResponse, ListFineTuneEventsRequest,
-    ListFineTuneEventsResponse, ListFineTuneResponse, RetrieveFineTuneRequest,
-    RetrieveFineTuneResponse,
+use crate::v1::fine_tuning::{
+    CancelFineTuningJobRequest, CreateFineTuningJobRequest, FineTuningJobEvent,
+    FineTuningJobObject, FineTuningPagination, ListFineTuningJobEventsRequest,
+    RetrieveFineTuningJobRequest,
 };
 use crate::v1::image::{
     ImageEditRequest, ImageEditResponse, ImageGenerationRequest, ImageGenerationResponse,
     ImageVariationRequest, ImageVariationResponse,
 };
+use crate::v1::message::{
+    CreateMessageRequest, ListMessage, ListMessageFile, MessageFileObject, MessageObject,
+    ModifyMessageRequest,
+};
 use crate::v1::moderation::{CreateModerationRequest, CreateModerationResponse};
+use crate::v1::run::{
+    CreateRunRequest, CreateThreadAndRunRequest, ListRun, ListRunStep, ModifyRunRequest, RunObject,
+    RunStepObject,
+};
+use crate::v1::thread::{CreateThreadRequest, ModifyThreadRequest, ThreadObject};
 
 use minreq::Response;
 use async_channel::{Sender, Receiver, unbounded};
@@ -35,6 +47,9 @@ use bytes::Bytes;
 use super::audio::AudioSpeechRequest;
 use super::chat_completion::{ChatCompletionChoice, FinishReason, ChatCompletionMessageForResponse};
 use serde_json::Value;
+use std::fs::{create_dir_all, File};
+use std::io::Write;
+use std::path::Path;
 
 const API_URL_V1: &str = "https://api.openai.com/v1";
 
@@ -42,6 +57,7 @@ pub struct Client {
     pub api_endpoint: String,
     pub api_key: String,
     pub organization: Option<String>,
+    pub proxy: Option<String>,
 }
 
 impl Client {
@@ -55,6 +71,7 @@ impl Client {
             api_endpoint,
             api_key,
             organization: None,
+            proxy: None,
         }
     }
 
@@ -64,15 +81,32 @@ impl Client {
             api_endpoint: endpoint,
             api_key,
             organization: organization.into(),
+            proxy: None,
         }
     }
 
-    pub fn build_request(&self, request: minreq::Request) -> minreq::Request {
+    pub fn new_with_proxy(api_key: String, proxy: String) -> Self {
+        let endpoint = std::env::var("OPENAI_API_BASE").unwrap_or_else(|_| API_URL_V1.to_owned());
+        Self {
+            api_endpoint: endpoint,
+            api_key,
+            organization: None,
+            proxy: Some(proxy),
+        }
+    }
+
+    pub fn build_request(&self, request: minreq::Request, is_beta: bool) -> minreq::Request {
         let mut request = request
             .with_header("Content-Type", "application/json")
             .with_header("Authorization", format!("Bearer {}", self.api_key));
         if let Some(organization) = &self.organization {
             request = request.with_header("openai-organization", organization);
+        }
+        if is_beta {
+            request = request.with_header("OpenAI-Beta", "assistants=v1");
+        }
+        if let Some(proxy) = &self.proxy {
+            request = request.with_proxy(minreq::Proxy::new(proxy).unwrap());
         }
         request
     }
@@ -87,8 +121,7 @@ impl Client {
             api_endpoint = self.api_endpoint,
             path = path
         );
-
-        let request = self.build_request(minreq::post(url));
+        let request = self.build_request(minreq::post(url), Self::is_beta(path));
         let res = request.with_json(params).unwrap().send();
         match res {
             Ok(res) => {
@@ -110,8 +143,7 @@ impl Client {
             api_endpoint = self.api_endpoint,
             path = path
         );
-
-        let request = self.build_request(minreq::get(url));
+        let request = self.build_request(minreq::get(url), Self::is_beta(path));
         let res = request.send();
         match res {
             Ok(res) => {
@@ -133,8 +165,7 @@ impl Client {
             api_endpoint = self.api_endpoint,
             path = path
         );
-
-        let request = self.build_request(minreq::delete(url));
+        let request = self.build_request(minreq::delete(url), Self::is_beta(path));
         let res = request.send();
         match res {
             Ok(res) => {
@@ -236,7 +267,10 @@ impl Client {
         let res = self.post("/completions", &req)?;
         let r = res.json::<CompletionResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -245,7 +279,10 @@ impl Client {
         let res = self.post("/edits", &req)?;
         let r = res.json::<EditResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -257,7 +294,10 @@ impl Client {
         let res = self.post("/images/generations", &req)?;
         let r = res.json::<ImageGenerationResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -266,7 +306,10 @@ impl Client {
         let res = self.post("/images/edits", &req)?;
         let r = res.json::<ImageEditResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -278,7 +321,10 @@ impl Client {
         let res = self.post("/images/variations", &req)?;
         let r = res.json::<ImageVariationResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -287,7 +333,10 @@ impl Client {
         let res = self.post("/embeddings", &req)?;
         let r = res.json::<EmbeddingResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -296,7 +345,10 @@ impl Client {
         let res = self.get("/files")?;
         let r = res.json::<FileListResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -305,7 +357,10 @@ impl Client {
         let res = self.post("/files", &req)?;
         let r = res.json::<FileUploadResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -314,7 +369,10 @@ impl Client {
         let res = self.delete(&format!("{}/{}", "/files", req.file_id))?;
         let r = res.json::<FileDeleteResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -326,7 +384,10 @@ impl Client {
         let res = self.get(&format!("{}/{}", "/files", req.file_id))?;
         let r = res.json::<FileRetrieveResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -338,7 +399,10 @@ impl Client {
         let res = self.get(&format!("{}/{}/content", "/files", req.file_id))?;
         let r = res.json::<FileRetrieveContentResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -350,7 +414,10 @@ impl Client {
         let res = self.post("/chat/completions", &req)?;
         let r = res.json::<ChatCompletionResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -438,7 +505,10 @@ impl Client {
         let res = self.post("/audio/transcriptions", &req)?;
         let r = res.json::<AudioTranscriptionResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -450,76 +520,126 @@ impl Client {
         let res = self.post("/audio/translations", &req)?;
         let r = res.json::<AudioTranslationResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
 
-    pub fn create_fine_tune(
+    pub fn audio_speech(&self, req: AudioSpeechRequest) -> Result<AudioSpeechResponse, APIError> {
+        let res = self.post("/audio/speech", &req)?;
+        let bytes = res.as_bytes();
+        let path = req.output.as_str();
+        let path = Path::new(path);
+        if let Some(parent) = path.parent() {
+            match create_dir_all(parent) {
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(APIError {
+                        message: e.to_string(),
+                    })
+                }
+            }
+        }
+        match File::create(path) {
+            Ok(mut file) => match file.write_all(bytes) {
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(APIError {
+                        message: e.to_string(),
+                    })
+                }
+            },
+            Err(e) => {
+                return Err(APIError {
+                    message: e.to_string(),
+                })
+            }
+        }
+        Ok(AudioSpeechResponse {
+            result: true,
+            headers: Some(res.headers),
+        })
+    }
+
+    pub fn create_fine_tuning_job(
         &self,
-        req: CreateFineTuneRequest,
-    ) -> Result<CreateFineTuneResponse, APIError> {
-        let res = self.post("/fine-tunes", &req)?;
-        let r = res.json::<CreateFineTuneResponse>();
+        req: CreateFineTuningJobRequest,
+    ) -> Result<FineTuningJobObject, APIError> {
+        let res = self.post("/fine_tuning/jobs", &req)?;
+        let r = res.json::<FineTuningJobObject>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
 
-    pub fn list_fine_tune(&self) -> Result<ListFineTuneResponse, APIError> {
-        let res = self.get("/fine-tunes")?;
-        let r = res.json::<ListFineTuneResponse>();
-        match r {
-            Ok(r) => Ok(r),
-            Err(e) => Err(self.new_error(e)),
-        }
-    }
-
-    pub fn retrieve_fine_tune(
+    pub fn list_fine_tuning_jobs(
         &self,
-        req: RetrieveFineTuneRequest,
-    ) -> Result<RetrieveFineTuneResponse, APIError> {
-        let res = self.get(&format!("/fine_tunes/{}", req.fine_tune_id))?;
-        let r = res.json::<RetrieveFineTuneResponse>();
+    ) -> Result<FineTuningPagination<FineTuningJobObject>, APIError> {
+        let res = self.get("/fine_tuning/jobs")?;
+        let r = res.json::<FineTuningPagination<FineTuningJobObject>>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
 
-    pub fn cancel_fine_tune(
+    pub fn list_fine_tuning_job_events(
         &self,
-        req: CancelFineTuneRequest,
-    ) -> Result<CancelFineTuneResponse, APIError> {
-        let res = self.post(&format!("/fine_tunes/{}/cancel", req.fine_tune_id), &req)?;
-        let r = res.json::<CancelFineTuneResponse>();
+        req: ListFineTuningJobEventsRequest,
+    ) -> Result<FineTuningPagination<FineTuningJobEvent>, APIError> {
+        let res = self.get(&format!(
+            "/fine_tuning/jobs/{}/events",
+            req.fine_tuning_job_id
+        ))?;
+        let r = res.json::<FineTuningPagination<FineTuningJobEvent>>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
 
-    pub fn list_fine_tune_events(
+    pub fn retrieve_fine_tuning_job(
         &self,
-        req: ListFineTuneEventsRequest,
-    ) -> Result<ListFineTuneEventsResponse, APIError> {
-        let res = self.get(&format!("/fine-tunes/{}/events", req.fine_tune_id))?;
-        let r = res.json::<ListFineTuneEventsResponse>();
+        req: RetrieveFineTuningJobRequest,
+    ) -> Result<FineTuningJobObject, APIError> {
+        let res = self.get(&format!("/fine_tuning/jobs/{}", req.fine_tuning_job_id))?;
+        let r = res.json::<FineTuningJobObject>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
 
-    pub fn delete_fine_tune(
+    pub fn cancel_fine_tuning_job(
         &self,
-        req: DeleteFineTuneModelRequest,
-    ) -> Result<DeleteFineTuneModelResponse, APIError> {
-        let res = self.delete(&format!("/models/{}", req.model_id))?;
-        let r = res.json::<DeleteFineTuneModelResponse>();
+        req: CancelFineTuningJobRequest,
+    ) -> Result<FineTuningJobObject, APIError> {
+        let res = self.post(
+            &format!("/fine_tuning/jobs/{}/cancel", req.fine_tuning_job_id),
+            &req,
+        )?;
+        let r = res.json::<FineTuningJobObject>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -531,7 +651,448 @@ impl Client {
         let res = self.post("/moderations", &req)?;
         let r = res.json::<CreateModerationResponse>();
         match r {
-            Ok(r) => Ok(r),
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn create_assistant(&self, req: AssistantRequest) -> Result<AssistantObject, APIError> {
+        let res = self.post("/assistants", &req)?;
+        let r = res.json::<AssistantObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn retrieve_assistant(&self, assistant_id: String) -> Result<AssistantObject, APIError> {
+        let res = self.get(&format!("/assistants/{}", assistant_id))?;
+        let r = res.json::<AssistantObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn modify_assistant(
+        &self,
+        assistant_id: String,
+        req: AssistantRequest,
+    ) -> Result<AssistantObject, APIError> {
+        let res = self.post(&format!("/assistants/{}", assistant_id), &req)?;
+        let r = res.json::<AssistantObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn delete_assistant(&self, assistant_id: String) -> Result<DeletionStatus, APIError> {
+        let res = self.delete(&format!("/assistants/{}", assistant_id))?;
+        let r = res.json::<DeletionStatus>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn list_assistant(
+        &self,
+        limit: Option<i64>,
+        order: Option<String>,
+        after: Option<String>,
+        before: Option<String>,
+    ) -> Result<ListAssistant, APIError> {
+        let mut url = "/assistants".to_owned();
+        url = Self::query_params(limit, order, after, before, url);
+        let res = self.get(&url)?;
+        let r = res.json::<ListAssistant>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn create_assistant_file(
+        &self,
+        assistant_id: String,
+        req: AssistantFileRequest,
+    ) -> Result<AssistantFileObject, APIError> {
+        let res = self.post(&format!("/assistants/{}/files", assistant_id), &req)?;
+        let r = res.json::<AssistantFileObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn retrieve_assistant_file(
+        &self,
+        assistant_id: String,
+        file_id: String,
+    ) -> Result<AssistantFileObject, APIError> {
+        let res = self.get(&format!("/assistants/{}/files/{}", assistant_id, file_id))?;
+        let r = res.json::<AssistantFileObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn delete_assistant_file(
+        &self,
+        assistant_id: String,
+        file_id: String,
+    ) -> Result<DeletionStatus, APIError> {
+        let res = self.delete(&format!("/assistants/{}/files/{}", assistant_id, file_id))?;
+        let r = res.json::<DeletionStatus>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn list_assistant_file(
+        &self,
+        assistant_id: String,
+        limit: Option<i64>,
+        order: Option<String>,
+        after: Option<String>,
+        before: Option<String>,
+    ) -> Result<ListAssistantFile, APIError> {
+        let mut url = format!("/assistants/{}/files", assistant_id);
+        url = Self::query_params(limit, order, after, before, url);
+        let res = self.get(&url)?;
+        let r = res.json::<ListAssistantFile>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn create_thread(&self, req: CreateThreadRequest) -> Result<ThreadObject, APIError> {
+        let res = self.post("/threads", &req)?;
+        let r = res.json::<ThreadObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn retrieve_thread(&self, thread_id: String) -> Result<ThreadObject, APIError> {
+        let res = self.get(&format!("/threads/{}", thread_id))?;
+        let r = res.json::<ThreadObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn modify_thread(
+        &self,
+        thread_id: String,
+        req: ModifyThreadRequest,
+    ) -> Result<ThreadObject, APIError> {
+        let res = self.post(&format!("/threads/{}", thread_id), &req)?;
+        let r = res.json::<ThreadObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn delete_thread(&self, thread_id: String) -> Result<DeletionStatus, APIError> {
+        let res = self.delete(&format!("/threads/{}", thread_id))?;
+        let r = res.json::<DeletionStatus>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn create_message(
+        &self,
+        thread_id: String,
+        req: CreateMessageRequest,
+    ) -> Result<MessageObject, APIError> {
+        let res = self.post(&format!("/threads/{}/messages", thread_id), &req)?;
+        let r = res.json::<MessageObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn retrieve_message(
+        &self,
+        thread_id: String,
+        message_id: String,
+    ) -> Result<MessageObject, APIError> {
+        let res = self.get(&format!("/threads/{}/messages/{}", thread_id, message_id))?;
+        let r = res.json::<MessageObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn modify_message(
+        &self,
+        thread_id: String,
+        message_id: String,
+        req: ModifyMessageRequest,
+    ) -> Result<MessageObject, APIError> {
+        let res = self.post(
+            &format!("/threads/{}/messages/{}", thread_id, message_id),
+            &req,
+        )?;
+        let r = res.json::<MessageObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn list_messages(&self, thread_id: String) -> Result<ListMessage, APIError> {
+        let res = self.get(&format!("/threads/{}/messages", thread_id))?;
+        let r = res.json::<ListMessage>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn retrieve_message_file(
+        &self,
+        thread_id: String,
+        message_id: String,
+        file_id: String,
+    ) -> Result<MessageFileObject, APIError> {
+        let res = self.get(&format!(
+            "/threads/{}/messages/{}/files/{}",
+            thread_id, message_id, file_id
+        ))?;
+        let r = res.json::<MessageFileObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn list_message_file(
+        &self,
+        thread_id: String,
+        message_id: String,
+        limit: Option<i64>,
+        order: Option<String>,
+        after: Option<String>,
+        before: Option<String>,
+    ) -> Result<ListMessageFile, APIError> {
+        let mut url = format!("/threads/{}/messages/{}/files", thread_id, message_id);
+        url = Self::query_params(limit, order, after, before, url);
+        let res = self.get(&url)?;
+        let r = res.json::<ListMessageFile>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn create_run(
+        &self,
+        thread_id: String,
+        req: CreateRunRequest,
+    ) -> Result<RunObject, APIError> {
+        let res = self.post(&format!("/threads/{}/runs", thread_id), &req)?;
+        let r = res.json::<RunObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn retrieve_run(&self, thread_id: String, run_id: String) -> Result<RunObject, APIError> {
+        let res = self.get(&format!("/threads/{}/runs/{}", thread_id, run_id))?;
+        let r = res.json::<RunObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn modify_run(
+        &self,
+        thread_id: String,
+        run_id: String,
+        req: ModifyRunRequest,
+    ) -> Result<RunObject, APIError> {
+        let res = self.post(&format!("/threads/{}/runs/{}", thread_id, run_id), &req)?;
+        let r = res.json::<RunObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn list_run(
+        &self,
+        thread_id: String,
+        limit: Option<i64>,
+        order: Option<String>,
+        after: Option<String>,
+        before: Option<String>,
+    ) -> Result<ListRun, APIError> {
+        let mut url = format!("/threads/{}/runs", thread_id);
+        url = Self::query_params(limit, order, after, before, url);
+        let res = self.get(&url)?;
+        let r = res.json::<ListRun>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn cancel_run(&self, thread_id: String, run_id: String) -> Result<RunObject, APIError> {
+        let empty_req = ModifyRunRequest::new();
+        let res = self.post(
+            &format!("/threads/{}/runs/{}/cancel", thread_id, run_id),
+            &empty_req,
+        )?;
+        let r = res.json::<RunObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn create_thread_and_run(
+        &self,
+        req: CreateThreadAndRunRequest,
+    ) -> Result<RunObject, APIError> {
+        let res = self.post("/threads/runs", &req)?;
+        let r = res.json::<RunObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn retrieve_run_step(
+        &self,
+        thread_id: String,
+        run_id: String,
+        step_id: String,
+    ) -> Result<RunStepObject, APIError> {
+        let res = self.get(&format!(
+            "/threads/{}/runs/{}/steps/{}",
+            thread_id, run_id, step_id
+        ))?;
+        let r = res.json::<RunStepObject>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
+            Err(e) => Err(self.new_error(e)),
+        }
+    }
+
+    pub fn list_run_step(
+        &self,
+        thread_id: String,
+        run_id: String,
+        limit: Option<i64>,
+        order: Option<String>,
+        after: Option<String>,
+        before: Option<String>,
+    ) -> Result<ListRunStep, APIError> {
+        let mut url = format!("/threads/{}/runs/{}/steps", thread_id, run_id);
+        url = Self::query_params(limit, order, after, before, url);
+        let res = self.get(&url)?;
+        let r = res.json::<ListRunStep>();
+        match r {
+            Ok(mut r) => {
+                r.headers = Some(res.headers);
+                Ok(r)
+            }
             Err(e) => Err(self.new_error(e)),
         }
     }
@@ -540,5 +1101,35 @@ impl Client {
         APIError {
             message: err.to_string(),
         }
+    }
+
+    fn is_beta(path: &str) -> bool {
+        path.starts_with("/assistants") || path.starts_with("/threads")
+    }
+
+    fn query_params(
+        limit: Option<i64>,
+        order: Option<String>,
+        after: Option<String>,
+        before: Option<String>,
+        mut url: String,
+    ) -> String {
+        let mut params = vec![];
+        if let Some(limit) = limit {
+            params.push(format!("limit={}", limit));
+        }
+        if let Some(order) = order {
+            params.push(format!("order={}", order));
+        }
+        if let Some(after) = after {
+            params.push(format!("after={}", after));
+        }
+        if let Some(before) = before {
+            params.push(format!("before={}", before));
+        }
+        if !params.is_empty() {
+            url = format!("{}?{}", url, params.join("&"));
+        }
+        url
     }
 }

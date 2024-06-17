@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::impl_builder_methods;
 
@@ -20,21 +21,22 @@ impl_builder_methods!(
     model: String
 );
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct CreateModerationResponse {
     pub id: String,
     pub model: String,
     pub results: Vec<ModerationResult>,
+    pub headers: Option<HashMap<String, String>>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ModerationResult {
     pub categories: ModerationCategories,
     pub category_scores: ModerationCategoryScores,
     pub flagged: bool,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ModerationCategories {
     #[serde(rename = "hate")]
     pub is_hate: bool,
@@ -50,7 +52,7 @@ pub struct ModerationCategories {
     pub is_violence_graphic: bool,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ModerationCategoryScores {
     #[serde(rename = "hate")]
     pub hate_score: f64,

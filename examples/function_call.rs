@@ -1,5 +1,6 @@
 use openai_api_rs::v1::api::Client;
-use openai_api_rs::v1::chat_completion::{self, ChatCompletionRequest, FunctionCallType};
+use openai_api_rs::v1::chat_completion::{self, ChatCompletionRequest};
+use openai_api_rs::v1::common::GPT3_5_TURBO_0613;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::{env, vec};
@@ -22,69 +23,72 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Box::new(chat_completion::JSONSchemaDefine {
             schema_type: Some(chat_completion::JSONSchemaType::String),
             description: Some("The cryptocurrency to get the price of".to_string()),
-            enum_values: None,
-            properties: None,
-            required: None,
-            items: None,
+            ..Default::default()
         }),
     );
 
     let req = ChatCompletionRequest::new(
-        chat_completion::GPT3_5_TURBO_0613.to_string(),
+        GPT3_5_TURBO_0613.to_string(),
         vec![chat_completion::ChatCompletionMessage {
             role: chat_completion::MessageRole::user,
-            content: String::from("What is the price of Ethereum?"),
+            content: chat_completion::Content::Text(String::from("What is the price of Ethereum?")),
             name: None,
-            function_call: None,
         }],
     )
-    .functions(vec![chat_completion::Function {
-        name: String::from("get_coin_price"),
-        description: Some(String::from("Get the price of a cryptocurrency")),
-        parameters: chat_completion::FunctionParameters {
-            schema_type: chat_completion::JSONSchemaType::Object,
-            properties: Some(properties),
-            required: Some(vec![String::from("coin")]),
+    .tools(vec![chat_completion::Tool {
+        r#type: chat_completion::ToolType::Function,
+        function: chat_completion::Function {
+            name: String::from("get_coin_price"),
+            description: Some(String::from("Get the price of a cryptocurrency")),
+            parameters: chat_completion::FunctionParameters {
+                schema_type: chat_completion::JSONSchemaType::Object,
+                properties: Some(properties),
+                required: Some(vec![String::from("coin")]),
+            },
         },
     }])
-    .function_call(FunctionCallType::Auto);
+    .tool_choice(chat_completion::ToolChoiceType::Auto);
 
-    // debug reuqest json
+    // debug request json
     // let serialized = serde_json::to_string(&req).unwrap();
     // println!("{}", serialized);
 
     let result = client.chat_completion(req)?;
 
-    match result.choices[0].finish_reason.clone().unwrap() {
-        chat_completion::FinishReason::stop => {
+    match result.choices[0].finish_reason {
+        None => {
+            println!("No finish_reason");
+            println!("{:?}", result.choices[0].message.content);
+        }
+        Some(chat_completion::FinishReason::stop) => {
             println!("Stop");
             println!("{:?}", result.choices[0].message.clone().unwrap().content);
         }
-        chat_completion::FinishReason::length => {
+        Some(chat_completion::FinishReason::length) => {
             println!("Length");
         }
-        chat_completion::FinishReason::function_call => {
-            println!("FunctionCall");
-            #[derive(Serialize, Deserialize, Clone)]
+        Some(chat_completion::FinishReason::tool_calls) => {
+            println!("ToolCalls");
+            #[derive(Deserialize, Serialize)]
             struct Currency {
                 coin: String,
             }
-            let message = result.choices[0].message.clone();
-            let message = message.unwrap();
-            let function_call = message.function_call.as_ref().unwrap();
-            let name = function_call.name.clone().unwrap();
-            let arguments = function_call.arguments.clone().unwrap();
-            let c: Currency = serde_json::from_str(&arguments)?;
-            let coin = c.coin;
-            if name == "get_coin_price" {
-                let price = get_coin_price(&coin);
-                println!("{} price: {}", coin, price);
+            let tool_calls = result.choices[0].message.tool_calls.as_ref().unwrap();
+            for tool_call in tool_calls {
+                let name = tool_call.function.name.clone().unwrap();
+                let arguments = tool_call.function.arguments.clone().unwrap();
+                let c: Currency = serde_json::from_str(&arguments)?;
+                let coin = c.coin;
+                if name == "get_coin_price" {
+                    let price = get_coin_price(&coin);
+                    println!("{} price: {}", coin, price);
+                }
             }
         }
-        chat_completion::FinishReason::content_filter => {
+        Some(chat_completion::FinishReason::content_filter) => {
             println!("ContentFilter");
         }
-        chat_completion::FinishReason::null => {
+        Some(chat_completion::FinishReason::null) => {
             println!("Null");
         }
     }

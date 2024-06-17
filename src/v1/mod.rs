@@ -7,8 +7,14 @@ pub mod completion;
 pub mod edit;
 pub mod embedding;
 pub mod file;
-pub mod fine_tune;
+pub mod fine_tuning;
 pub mod image;
 pub mod moderation;
+
+// beta
+pub mod assistant;
+pub mod message;
+pub mod run;
+pub mod thread;
 
 pub mod api;

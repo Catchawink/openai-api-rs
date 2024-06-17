@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::option::Option;
 
 use crate::impl_builder_methods;
@@ -39,16 +40,17 @@ impl_builder_methods!(
     top_p: f32
 );
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct EditChoice {
     pub text: String,
     pub index: i32,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct EditResponse {
     pub object: String,
     pub created: i64,
     pub usage: common::Usage,
     pub choices: Vec<EditChoice>,
+    pub headers: Option<HashMap<String, String>>,
 }

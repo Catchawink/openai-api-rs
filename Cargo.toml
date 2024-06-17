@@ -1,8 +1,8 @@
 [package]
 name = "openai-api-rs"
-version = "2.0.3"
+version = "4.0.9"
 edition = "2021"
-authors = ["Dongri Jin <dongrify@gmail.com>"]
+authors = ["Dongri Jin <dongrium@gmail.com>"]
 license = "MIT"
 description = "OpenAI API client library for Rust (unofficial)"
 repository = "https://github.com/dongri/openai-api-rs"
@@ -31,4 +31,4 @@ default-features = false
 [dependencies.minreq]
 version = "2"
 default-features = false
-features = ["json-using-serde", "https-rustls"]
+features = ["https-rustls", "json-using-serde", "proxy"]
