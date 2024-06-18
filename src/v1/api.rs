@@ -441,12 +441,8 @@ impl Client {
                             choices: vec![
                                 ChatCompletionChoice {
                                     index: 0,
-                                    message: ChatCompletionMessageForResponse {
-                                        content: Some("".to_string()),
-                                        name: None,
-                                        role: None,
-                                        tool_calls: None
-                                    },
+                                    message: None,
+                                    delta: None,
                                     finish_reason: Some(FinishReason::stop),
                                     finish_details: None
                                 }

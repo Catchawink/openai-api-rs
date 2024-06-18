@@ -53,11 +53,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match result.choices[0].finish_reason {
         None => {
             println!("No finish_reason");
-            println!("{:?}", result.choices[0].message.content);
+            println!("{:?}", result.choices[0].message.as_ref().unwrap().content);
         }
         Some(chat_completion::FinishReason::stop) => {
             println!("Stop");
-            println!("{:?}", result.choices[0].message.content);
+            println!("{:?}", result.choices[0].message.as_ref().unwrap().content);
         }
         Some(chat_completion::FinishReason::length) => {
             println!("Length");
@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             struct Currency {
                 coin: String,
             }
-            let tool_calls = result.choices[0].message.tool_calls.as_ref().unwrap();
+            let tool_calls = result.choices[0].message.as_ref().unwrap().tool_calls.as_ref().unwrap();
             for tool_call in tool_calls {
                 let function_call = &tool_call.function;
                 let arguments = function_call.arguments.clone().unwrap();
@@ -100,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
 
                 let result = client.chat_completion(req)?;
-                println!("{:?}", result.choices[0].message.content);
+                println!("{:?}", result.choices[0].message.as_ref().unwrap().content);
             }
         }
         Some(chat_completion::FinishReason::content_filter) => {

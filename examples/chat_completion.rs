@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let result = client.chat_completion(req)?;
-    println!("Content: {:?}", result.choices[0].message.content);
+    println!("Content: {:?}", result.choices[0].message.as_ref().unwrap().content);
     println!("Response Headers: {:?}", result.headers);
 
     Ok(())
