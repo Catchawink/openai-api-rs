@@ -447,11 +447,7 @@ impl Client {
                                     finish_details: None
                                 }
                             ],
-                            usage: Usage {
-                                prompt_tokens: 0,
-                                completion_tokens: 0,
-                                total_tokens: 0,
-                            },
+                            usage: None,
                             system_fingerprint: None,
                             headers: None,
                         })
