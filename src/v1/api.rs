@@ -192,8 +192,8 @@ impl Client {
         
         let api_key = self.api_key.clone();
 
-        println!("{}", url.clone());
-        println!("{}", api_key.clone());
+        //println!("{}", url.clone());
+        //println!("{}", api_key.clone());
 
         let res = reqwest::Client::new().post(&url)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
