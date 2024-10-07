@@ -19,7 +19,7 @@ pub struct FileListResponse {
     pub headers: Option<HashMap<String, String>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct FileUploadRequest {
     pub file: String,
     pub purpose: String,
@@ -42,7 +42,7 @@ pub struct FileUploadResponse {
     pub headers: Option<HashMap<String, String>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct FileDeleteRequest {
     pub file_id: String,
 }
@@ -61,10 +61,43 @@ pub struct FileDeleteResponse {
     pub headers: Option<HashMap<String, String>>,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct FileRetrieveRequest {
+    pub file_id: String,
+}
+
+impl FileRetrieveRequest {
+    pub fn new(file_id: String) -> Self {
+        Self { file_id }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FileRetrieveResponse {
     pub id: String,
-    pub object: String,
+    pub oejct: String,
+    pub bytes: i32,
+    pub created_at: i64,
+    pub filename: String,
+    pub purpose: String,
+    pub headers: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FileRetrieveContentRequest {
+    pub file_id: String,
+}
+
+impl FileRetrieveContentRequest {
+    pub fn new(file_id: String) -> Self {
+        Self { file_id }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct FileRetrieveContentResponse {
+    pub id: String,
+    pub oejct: String,
     pub bytes: i32,
     pub created_at: i64,
     pub filename: String,

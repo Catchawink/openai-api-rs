@@ -37,12 +37,17 @@ use crate::v1::run::{
 };
 use crate::v1::thread::{CreateThreadRequest, ModifyThreadRequest, ThreadObject};
 
+use minreq::Response;
+use async_channel::{Sender, Receiver, unbounded};
+use eventsource_stream::{Event, Eventsource, EventStream};
+use futures::stream::Map;
+use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
+use anyhow::{anyhow, Result, Error};
 use bytes::Bytes;
-use reqwest::multipart::{Form, Part};
-use reqwest::{Client, Method, Response};
-use serde::Serialize;
-use serde_json::Value;
 
+use super::chat_completion::{ChatCompletionChoice, FinishReason, ChatCompletionMessageForResponse};
+use super::common::Usage;
+use serde_json::Value;
 use std::fs::{create_dir_all, File};
 use std::io::Read;
 use std::io::Write;
@@ -200,6 +205,88 @@ impl OpenAIClient {
         }
     }
 
+    pub async fn byte_stream<T1: serde::ser::Serialize + Send + Sync + 'static>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<Bytes>>, Error> {
+        //let (tx, rx) = unbounded::<Result<T2, APIError>>();
+        
+        let url = format!(
+            "{api_endpoint}{path}",
+            api_endpoint = self.api_endpoint,
+            path = path
+        );
+        
+        let api_key = self.api_key.clone();
+
+        //println!("{}", url.clone());
+        //println!("{}", api_key.clone());
+
+        let res = reqwest::Client::new().post(&url)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .header(reqwest::header::AUTHORIZATION, "Bearer ".to_owned() + &api_key)
+        .json(&params)
+        .send().await?;
+
+        let stream = res.bytes_stream();
+
+        let stream = stream.map(|x| {
+            match x {
+                Ok(x) => {
+                    Ok(x)
+                }
+                Err(err) => {
+                    Err(anyhow!(err))
+                }
+            }
+        });
+
+        Ok(Box::new(stream))
+    }
+
+    pub async fn event_stream<T1: serde::ser::Serialize + Send + Sync + 'static>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<Event, Error>>, Error> {
+
+        let byte_stream = self.byte_stream(path, params).await?;
+
+        let stream = byte_stream.eventsource();
+
+        let stream = stream.map(|x| {
+            match x {
+                Ok(x) => {
+                    Ok(x)
+                }
+                Err(err) => {
+                    Err(anyhow!(err))
+                }
+            }
+        });
+
+        Ok(Box::new(stream))
+    }
+
+    pub async fn stream<T1: serde::ser::Serialize + Send + Sync + 'static, T2: for<'a> serde::de::Deserialize<'a> + Send + Sync>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<T2, Error>>, Error> {
+
+        let stream = self.event_stream(path, params).await?;
+
+        let map = stream.map(|x| {
+            match x {
+                Ok(x) => {
+                    let result = serde_json::from_str::<T2>(&x.data.clone());
+                    match result {
+                        Ok(result) => {
+                            Ok(result)
+                        },
+                        Err(err) => {
+                            Err(anyhow!(err))
+                        }
+                    }
+                }
+                Err(err) => {
+                    Err(anyhow!(err))
+                }
+            }
+        });
+
+        Ok(Box::new(map))
+    }
+
     pub async fn completion(&self, req: CompletionRequest) -> Result<CompletionResponse, APIError> {
         self.post("completions", &req).await
     }
@@ -262,6 +349,75 @@ impl OpenAIClient {
         req: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, APIError> {
         self.post("chat/completions", &req).await
+    }
+
+    pub async fn chat_completion_stream(
+        &self,
+        req: ChatCompletionRequest,
+    ) -> Result<impl Stream<Item = Result<ChatCompletionResponse, Error>>, Error> {
+        //self.stream("/chat/completions", req).await
+        let stream = self.event_stream("/chat/completions", req).await?;
+        let stream = stream.map(|x| {
+            match x {
+                Ok(x) => {
+                    let data = x.data.clone();
+                    if data == "[DONE]" {
+                        Ok(ChatCompletionResponse {
+                            id: "".to_string(),
+                            object: "".to_string(),
+                            created: 0,
+                            model: "".to_string(),
+                            choices: vec![
+                                ChatCompletionChoice {
+                                    index: 0,
+                                    message: None,
+                                    delta: None,
+                                    finish_reason: Some(FinishReason::stop),
+                                    finish_details: None
+                                }
+                            ],
+                            usage: None,
+                            system_fingerprint: None,
+                            headers: None,
+                        })
+                    } else if data.clone().starts_with("{") {
+                        let result = serde_json::from_str::<ChatCompletionResponse>(&data.clone());
+                        match result {
+                            Ok(result) => {
+                                Ok(result)
+                            },
+                            Err(err) => {
+                                Err(anyhow!(format!("Error parsing:\n\n{}\n\n{}", data.clone(), err)))
+                            }
+                        }
+                    } else {
+                        Err(anyhow!("Invalid result!"))
+                    }
+                }
+                Err(err) => {
+                    Err(anyhow!(err))
+                }
+            }
+        });
+        Ok(stream)
+    }
+    
+    // TODO: Test
+    pub async fn create_speech_stream(
+        &self,
+        req: AudioSpeechRequest,
+    ) -> Result<impl Stream<Item = Result<Bytes, Error>>> {
+        let stream = self.byte_stream("/audio/speech", req).await?;
+        Ok(stream)
+    }
+
+    pub fn create_speech(
+        &self,
+        req: AudioSpeechRequest,
+    ) -> Result<Bytes> {
+        let res = self.post("/audio/speech", &req)?;
+        let r = res.into_bytes();
+        Ok(Bytes::from(r))
     }
 
     pub async fn audio_transcription(

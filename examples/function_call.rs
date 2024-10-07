@@ -61,11 +61,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match result.choices[0].finish_reason {
         None => {
             println!("No finish_reason");
-            println!("{:?}", result.choices[0].message.content);
+            println!("{:?}", result.choices[0].message.as_ref().unwrap().content);
         }
         Some(chat_completion::FinishReason::stop) => {
             println!("Stop");
-            println!("{:?}", result.choices[0].message.content);
+            println!("{:?}", result.choices[0].message.as_ref().unwrap().content);
         }
         Some(chat_completion::FinishReason::length) => {
             println!("Length");
@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             struct Currency {
                 coin: String,
             }
-            let tool_calls = result.choices[0].message.tool_calls.as_ref().unwrap();
+            let tool_calls = result.choices[0].message.as_ref().unwrap().tool_calls.as_ref().unwrap();
             for tool_call in tool_calls {
                 let name = tool_call.function.name.clone().unwrap();
                 let arguments = tool_call.function.arguments.clone().unwrap();
