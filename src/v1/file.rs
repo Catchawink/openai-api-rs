@@ -1,19 +1,22 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct FileData {
     pub id: String,
-    pub oejct: String,
+    pub object: String,
     pub bytes: i32,
     pub created_at: i64,
     pub filename: String,
     pub purpose: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct FileListResponse {
     pub object: String,
     pub data: Vec<FileData>,
+    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -28,14 +31,15 @@ impl FileUploadRequest {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct FileUploadResponse {
     pub id: String,
-    pub oejct: String,
+    pub object: String,
     pub bytes: i32,
     pub created_at: i64,
     pub filename: String,
     pub purpose: String,
+    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -49,51 +53,21 @@ impl FileDeleteRequest {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct FileDeleteResponse {
     pub id: String,
-    pub oejct: String,
+    pub object: String,
     pub delete: bool,
+    pub headers: Option<HashMap<String, String>>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct FileRetrieveRequest {
-    pub file_id: String,
-}
-
-impl FileRetrieveRequest {
-    pub fn new(file_id: String) -> Self {
-        Self { file_id }
-    }
-}
-
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct FileRetrieveResponse {
     pub id: String,
-    pub oejct: String,
+    pub object: String,
     pub bytes: i32,
     pub created_at: i64,
     pub filename: String,
     pub purpose: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FileRetrieveContentRequest {
-    pub file_id: String,
-}
-
-impl FileRetrieveContentRequest {
-    pub fn new(file_id: String) -> Self {
-        Self { file_id }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct FileRetrieveContentResponse {
-    pub id: String,
-    pub oejct: String,
-    pub bytes: i32,
-    pub created_at: i64,
-    pub filename: String,
-    pub purpose: String,
+    pub headers: Option<HashMap<String, String>>,
 }

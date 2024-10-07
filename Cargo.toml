@@ -1,24 +1,34 @@
 [package]
 name = "openai-api-rs"
-version = "2.0.3"
+version = "5.0.10"
 edition = "2021"
-authors = ["Dongri Jin <dongrify@gmail.com>"]
+authors = ["Dongri Jin <dongrium@gmail.com>"]
 license = "MIT"
 description = "OpenAI API client library for Rust (unofficial)"
 repository = "https://github.com/dongri/openai-api-rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["default-tls"]
+rustls = ["reqwest/rustls-tls"]
+default-tls = ["reqwest/default-tls"]
+
+[dependencies.reqwest]
+version = "0.12"
+default-features = false
+features = ["charset", "http2", "json", "multipart", "socks"]
+
+[dependencies.tokio]
+version = "1"
+features = ["full"]
+
 [dependencies.serde]
 version = "1"
 features = ["derive"]
-default-features = false
 
 [dependencies.serde_json]
 version = "1"
-default-features = false
 
-[dependencies.minreq]
-version = "2"
-default-features = false
-features = ["https-rustls", "json-using-serde"]
+[dependencies.bytes]
+version = "1.7.1"

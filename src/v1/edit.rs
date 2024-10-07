@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::option::Option;
 
 use crate::impl_builder_methods;
 use crate::v1::common;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct EditRequest {
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -39,16 +40,17 @@ impl_builder_methods!(
     top_p: f32
 );
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct EditChoice {
     pub text: String,
     pub index: i32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct EditResponse {
     pub object: String,
     pub created: i64,
     pub usage: common::Usage,
     pub choices: Vec<EditChoice>,
+    pub headers: Option<HashMap<String, String>>,
 }
