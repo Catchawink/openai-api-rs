@@ -10,12 +10,11 @@ repository = "https://github.com/dongri/openai-api-rs"
 [dependencies]
 async-channel = "1.8.0"
 eventsource-stream = "0.2.3"
-reqwest = { version = "0.11.13", features = ["json", "stream"] }
-tokio = { version = "1.32.0", default-features = false, features = ["macros", "rt", "sync"] }
 futures = "0.3.25"
-futures-util = "0.3.25"
 anyhow = "1.0.75"
-bytes = "1.5.0"
+tungstenite = "0.24.0"
+url = "2.5.2"
+base64 = "0.22.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -24,18 +23,14 @@ default = ["default-tls"]
 rustls = ["reqwest/rustls-tls"]
 default-tls = ["reqwest/default-tls"]
 
-[dependencies]
-tokio-tungstenite = "0.24.0"
-tungstenite = "0.24.0"
-
 [dependencies.reqwest]
 version = "0.12"
 default-features = false
-features = ["charset", "http2", "json", "multipart", "socks"]
+features = ["charset", "http2", "json", "stream", "multipart", "socks"]
 
 [dependencies.tokio]
-version = "1"
-features = ["full"]
+version = "1.32.0"
+features = ["rt-multi-thread", "macros", "rt", "sync"]
 
 [dependencies.serde]
 version = "1"

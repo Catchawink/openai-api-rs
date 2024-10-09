@@ -55,7 +55,7 @@ struct Session {
     voice: Option<String>,
 }
 
-async fn connect_realtime_api(api_key: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn connect_realtime_api(api_key: &str) -> Result<(), Box<dyn std::error::Error>> {
     let url = Url::parse("wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01")?;
     let req = Request::builder()
         .uri(url.to_string())

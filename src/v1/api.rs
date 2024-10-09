@@ -37,13 +37,15 @@ use crate::v1::run::{
 };
 use crate::v1::thread::{CreateThreadRequest, ModifyThreadRequest, ThreadObject};
 
-use minreq::Response;
 use async_channel::{Sender, Receiver, unbounded};
 use eventsource_stream::{Event, Eventsource, EventStream};
 use futures::stream::Map;
 use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
 use anyhow::{anyhow, Result, Error};
 use bytes::Bytes;
+use reqwest::multipart::{Form, Part};
+use reqwest::{Client, Method, Response};
+use serde::Serialize;
 
 use super::chat_completion::{ChatCompletionChoice, FinishReason, ChatCompletionMessageForResponse};
 use super::common::Usage;
@@ -173,6 +175,18 @@ impl OpenAIClient {
         let request = self.build_request(Method::DELETE, path).await;
         let response = request.send().await?;
         self.handle_response(response).await
+    }
+
+    
+    async fn post_bytes(
+        &self,
+        path: &str,
+        body: &impl serde::ser::Serialize,
+    ) -> Result<Bytes, APIError> {
+        let request = self.build_request(Method::POST, path).await;
+        let request = request.json(body);
+        let bytes = request.send().await?.bytes().await?;
+        Ok(bytes)
     }
 
     async fn post_form<T: serde::de::DeserializeOwned>(
@@ -411,13 +425,12 @@ impl OpenAIClient {
         Ok(stream)
     }
 
-    pub fn create_speech(
+    pub async fn create_speech(
         &self,
         req: AudioSpeechRequest,
     ) -> Result<Bytes> {
-        let res = self.post("/audio/speech", &req)?;
-        let r = res.into_bytes();
-        Ok(Bytes::from(r))
+        let res = self.post_bytes("/audio/speech", &req).await?;
+        Ok(res)
     }
 
     pub async fn audio_transcription(

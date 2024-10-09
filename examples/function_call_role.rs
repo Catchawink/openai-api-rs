@@ -107,7 +107,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
 
                 let result = client.chat_completion(req).await?;
-                println!("{:?}", result.choices[0].message.content);
+                println!("{:?}", result.choices[0].message.as_ref().unwrap().content);
             }
         }
         Some(chat_completion::FinishReason::content_filter) => {
