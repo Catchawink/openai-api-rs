@@ -218,6 +218,8 @@ pub enum ResponseStatus {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
 pub enum ResponseStatusDetail {
+    #[serde(rename = "cancelled")]
+    Cancelled,
     #[serde(rename = "incomplete")]
     Incomplete { reason: IncompleteReason },
     #[serde(rename = "failed")]
