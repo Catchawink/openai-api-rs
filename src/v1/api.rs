@@ -1,13 +1,16 @@
 use crate::v1::assistant::{
-    AssistantFileObject, AssistantFileRequest, AssistantObject, AssistantRequest, DeletionStatus,
-    ListAssistant, ListAssistantFile,
+    AssistantFileObject, AssistantFileRequest, AssistantObject, AssistantRequest, ListAssistant,
+    ListAssistantFile,
 };
 use crate::v1::audio::{
     AudioSpeechRequest, AudioSpeechResponse, AudioTranscriptionRequest, AudioTranscriptionResponse,
     AudioTranslationRequest, AudioTranslationResponse,
 };
 use crate::v1::batch::{BatchResponse, CreateBatchRequest, ListBatchResponse};
-use crate::v1::chat_completion::{ChatCompletionRequest, ChatCompletionResponse};
+use crate::v1::chat_completion::chat_completion::{ChatCompletionRequest, ChatCompletionResponse};
+use crate::v1::chat_completion::chat_completion_stream::{
+    ChatCompletionStream, ChatCompletionStreamRequest, ChatCompletionStreamResponse,
+};
 use crate::v1::common;
 use crate::v1::completion::{CompletionRequest, CompletionResponse};
 use crate::v1::edit::{EditRequest, EditResponse};
@@ -30,7 +33,15 @@ use crate::v1::message::{
     CreateMessageRequest, ListMessage, ListMessageFile, MessageFileObject, MessageObject,
     ModifyMessageRequest,
 };
+use crate::v1::model::{ModelResponse, ModelsResponse};
 use crate::v1::moderation::{CreateModerationRequest, CreateModerationResponse};
+use crate::v1::responses::responses::{
+    CallResponse, CountTokensRequest, CountTokensResponse, CreateResponseRequest, ListResponses,
+    ResponseObject,
+};
+use crate::v1::responses::responses_stream::{
+    CreateResponseStreamRequest, ResponseStream, ResponseStreamResponse,
+};
 use crate::v1::run::{
     CreateRunRequest, CreateThreadAndRunRequest, ListRun, ListRunStep, ModifyRunRequest, RunObject,
     RunStepObject,
@@ -43,13 +54,15 @@ use futures::stream::Map;
 use futures_util::{Stream, FutureExt, StreamExt, stream, TryStreamExt};
 use anyhow::{anyhow, Result, Error};
 use bytes::Bytes;
+use futures_util::Stream;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::multipart::{Form, Part};
 use reqwest::{Client, Method, Response};
 use serde::Serialize;
+use serde_json::{to_value, Value};
+use url::Url;
 
-use super::chat_completion::{ChatCompletionChoice, FinishReason, ChatCompletionMessageForResponse};
-use super::common::Usage;
-use serde_json::Value;
+use std::error::Error;
 use std::fs::{create_dir_all, File};
 use std::io::Read;
 use std::io::Write;
@@ -57,66 +70,95 @@ use std::path::Path;
 
 const API_URL_V1: &str = "https://api.openai.com/v1";
 
+#[derive(Default)]
+pub struct OpenAIClientBuilder {
+    api_endpoint: Option<String>,
+    api_key: Option<String>,
+    organization: Option<String>,
+    proxy: Option<String>,
+    timeout: Option<u64>,
+    headers: Option<HeaderMap>,
+}
+
+#[derive(Debug)]
 pub struct OpenAIClient {
-    pub api_endpoint: String,
-    pub api_key: String,
-    pub organization: Option<String>,
-    pub proxy: Option<String>,
-    pub timeout: Option<u64>,
+    api_endpoint: String,
+    api_key: Option<String>,
+    organization: Option<String>,
+    proxy: Option<String>,
+    timeout: Option<u64>,
+    headers: Option<HeaderMap>,
+}
+
+impl OpenAIClientBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_api_key(mut self, api_key: impl Into<String>) -> Self {
+        self.api_key = Some(api_key.into());
+        self
+    }
+
+    pub fn with_endpoint(mut self, endpoint: impl Into<String>) -> Self {
+        self.api_endpoint = Some(endpoint.into());
+        self
+    }
+
+    pub fn with_organization(mut self, organization: impl Into<String>) -> Self {
+        self.organization = Some(organization.into());
+        self
+    }
+
+    pub fn with_proxy(mut self, proxy: impl Into<String>) -> Self {
+        self.proxy = Some(proxy.into());
+        self
+    }
+
+    pub fn with_timeout(mut self, timeout: u64) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        let headers = self.headers.get_or_insert_with(HeaderMap::new);
+        headers.insert(
+            HeaderName::from_bytes(key.into().as_bytes()).expect("Invalid header name"),
+            HeaderValue::from_str(&value.into()).expect("Invalid header value"),
+        );
+        self
+    }
+
+    pub fn build(self) -> Result<OpenAIClient, Box<dyn Error>> {
+        let api_endpoint = self.api_endpoint.unwrap_or_else(|| {
+            std::env::var("OPENAI_API_BASE").unwrap_or_else(|_| API_URL_V1.to_owned())
+        });
+
+        Ok(OpenAIClient {
+            api_endpoint,
+            api_key: self.api_key,
+            organization: self.organization,
+            proxy: self.proxy,
+            timeout: self.timeout,
+            headers: self.headers,
+        })
+    }
 }
 
 impl OpenAIClient {
-    pub fn new(api_key: String) -> Self {
-        let endpoint = std::env::var("OPENAI_API_BASE").unwrap_or_else(|_| API_URL_V1.to_owned());
-        Self::new_with_endpoint(endpoint, api_key)
-    }
-
-    pub fn new_with_endpoint(api_endpoint: String, api_key: String) -> Self {
-        Self {
-            api_endpoint,
-            api_key,
-            organization: None,
-            proxy: None,
-            timeout: None,
-        }
-    }
-
-    pub fn new_with_organization(api_key: String, organization: String) -> Self {
-        let endpoint = std::env::var("OPENAI_API_BASE").unwrap_or_else(|_| API_URL_V1.to_owned());
-        Self {
-            api_endpoint: endpoint,
-            api_key,
-            organization: Some(organization),
-            proxy: None,
-            timeout: None,
-        }
-    }
-
-    pub fn new_with_proxy(api_key: String, proxy: String) -> Self {
-        let endpoint = std::env::var("OPENAI_API_BASE").unwrap_or_else(|_| API_URL_V1.to_owned());
-        Self {
-            api_endpoint: endpoint,
-            api_key,
-            organization: None,
-            proxy: Some(proxy),
-            timeout: None,
-        }
-    }
-
-    pub fn new_with_timeout(api_key: String, timeout: u64) -> Self {
-        let endpoint = std::env::var("OPENAI_API_BASE").unwrap_or_else(|_| API_URL_V1.to_owned());
-        Self {
-            api_endpoint: endpoint,
-            api_key,
-            organization: None,
-            proxy: None,
-            timeout: Some(timeout),
-        }
+    pub fn builder() -> OpenAIClientBuilder {
+        OpenAIClientBuilder::new()
     }
 
     async fn build_request(&self, method: Method, path: &str) -> reqwest::RequestBuilder {
-        let url = format!("{}/{}", self.api_endpoint, path);
+        let url = self
+            .build_url_with_preserved_query(path)
+            .unwrap_or_else(|_| format!("{}/{}", self.api_endpoint, path));
+
         let client = Client::builder();
+
+        #[cfg(feature = "rustls")]
+        let client = client.use_rustls_tls();
 
         let client = if let Some(timeout) = self.timeout {
             client.timeout(std::time::Duration::from_secs(timeout))
@@ -132,13 +174,20 @@ impl OpenAIClient {
 
         let client = client.build().unwrap();
 
-        let mut request = client
-            .request(method, url)
-            // .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", self.api_key));
+        let mut request = client.request(method, url);
+
+        if let Some(api_key) = &self.api_key {
+            request = request.header("Authorization", format!("Bearer {api_key}"));
+        }
 
         if let Some(organization) = &self.organization {
             request = request.header("openai-organization", organization);
+        }
+
+        if let Some(headers) = &self.headers {
+            for (key, value) in headers {
+                request = request.header(key, value);
+            }
         }
 
         if Self::is_beta(path) {
@@ -152,14 +201,17 @@ impl OpenAIClient {
         &self,
         path: &str,
         body: &impl serde::ser::Serialize,
-    ) -> Result<T, APIError> {
+    ) -> Result<CallResponse<T>, APIError> {
         let request = self.build_request(Method::POST, path).await;
         let request = request.json(body);
         let response = request.send().await?;
         self.handle_response(response).await
     }
 
-    async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, APIError> {
+    async fn get<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<CallResponse<T>, APIError> {
         let request = self.build_request(Method::GET, path).await;
         let response = request.send().await?;
         self.handle_response(response).await
@@ -171,7 +223,10 @@ impl OpenAIClient {
         Ok(response.bytes().await?)
     }
 
-    async fn delete<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, APIError> {
+    async fn delete<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<CallResponse<T>, APIError> {
         let request = self.build_request(Method::DELETE, path).await;
         let response = request.send().await?;
         self.handle_response(response).await
@@ -193,152 +248,95 @@ impl OpenAIClient {
         &self,
         path: &str,
         form: Form,
-    ) -> Result<T, APIError> {
+    ) -> Result<CallResponse<T>, APIError> {
         let request = self.build_request(Method::POST, path).await;
         let request = request.multipart(form);
         let response = request.send().await?;
         self.handle_response(response).await
     }
 
+    async fn post_form_raw(&self, path: &str, form: Form) -> Result<Bytes, APIError> {
+        let request = self.build_request(Method::POST, path).await;
+        let request = request.multipart(form);
+        let response = request.send().await?;
+        Ok(response.bytes().await?)
+    }
+
     async fn handle_response<T: serde::de::DeserializeOwned>(
         &self,
         response: Response,
-    ) -> Result<T, APIError> {
+    ) -> Result<CallResponse<T>, APIError> {
         let status = response.status();
         if status.is_success() {
-            let parsed = response.json::<T>().await?;
-            Ok(parsed)
+            let headers = response.headers().clone();
+            let text = response.text().await.unwrap_or_else(|_| "".to_string());
+            match serde_json::from_str::<T>(&text) {
+                Ok(parsed) => Ok(CallResponse {
+                    headers,
+                    inner: parsed,
+                }),
+                Err(e) => Err(APIError::CustomError {
+                    message: format!("Failed to parse JSON: {e} / response {text}"),
+                }),
+            }
         } else {
             let error_message = response
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             Err(APIError::CustomError {
-                message: format!("{}: {}", status, error_message),
+                message: format!("{status}: {error_message}"),
             })
         }
     }
 
-    pub async fn byte_stream<T1: serde::ser::Serialize + Send + Sync + 'static>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<Bytes>>, Error> {
-        //let (tx, rx) = unbounded::<Result<T2, APIError>>();
-        
-        let url = format!(
-            "{api_endpoint}{path}",
-            api_endpoint = self.api_endpoint,
-            path = path
-        );
-        
-        let api_key = self.api_key.clone();
-
-        //println!("{}", url.clone());
-        //println!("{}", api_key.clone());
-
-        let res = reqwest::Client::new().post(&url)
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .header(reqwest::header::AUTHORIZATION, "Bearer ".to_owned() + &api_key)
-        .json(&params)
-        .send().await?;
-
-        let stream = res.bytes_stream();
-
-        let stream = stream.map(|x| {
-            match x {
-                Ok(x) => {
-                    Ok(x)
-                }
-                Err(err) => {
-                    Err(anyhow!(err))
-                }
-            }
-        });
-
-        Ok(Box::new(stream))
-    }
-
-    pub async fn event_stream<T1: serde::ser::Serialize + Send + Sync + 'static>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<Event, Error>>, Error> {
-
-        let byte_stream = self.byte_stream(path, params).await?;
-
-        let stream = byte_stream.eventsource();
-
-        let stream = stream.map(|x| {
-            match x {
-                Ok(x) => {
-                    Ok(x)
-                }
-                Err(err) => {
-                    Err(anyhow!(err))
-                }
-            }
-        });
-
-        Ok(Box::new(stream))
-    }
-
-    pub async fn stream<T1: serde::ser::Serialize + Send + Sync + 'static, T2: for<'a> serde::de::Deserialize<'a> + Send + Sync>(&self, path: &str, params: T1) -> Result<impl Stream<Item = Result<T2, Error>>, Error> {
-
-        let stream = self.event_stream(path, params).await?;
-
-        let map = stream.map(|x| {
-            match x {
-                Ok(x) => {
-                    let result = serde_json::from_str::<T2>(&x.data.clone());
-                    match result {
-                        Ok(result) => {
-                            Ok(result)
-                        },
-                        Err(err) => {
-                            Err(anyhow!(err))
-                        }
-                    }
-                }
-                Err(err) => {
-                    Err(anyhow!(err))
-                }
-            }
-        });
-
-        Ok(Box::new(map))
-    }
-
-    pub async fn completion(&self, req: CompletionRequest) -> Result<CompletionResponse, APIError> {
+    pub async fn completion(
+        &self,
+        req: CompletionRequest,
+    ) -> Result<CallResponse<CompletionResponse>, APIError> {
         self.post("completions", &req).await
     }
 
-    pub async fn edit(&self, req: EditRequest) -> Result<EditResponse, APIError> {
+    pub async fn edit(&self, req: EditRequest) -> Result<CallResponse<EditResponse>, APIError> {
         self.post("edits", &req).await
     }
 
     pub async fn image_generation(
         &self,
         req: ImageGenerationRequest,
-    ) -> Result<ImageGenerationResponse, APIError> {
+    ) -> Result<CallResponse<ImageGenerationResponse>, APIError> {
         self.post("images/generations", &req).await
     }
 
-    pub async fn image_edit(&self, req: ImageEditRequest) -> Result<ImageEditResponse, APIError> {
+    pub async fn image_edit(
+        &self,
+        req: ImageEditRequest,
+    ) -> Result<CallResponse<ImageEditResponse>, APIError> {
         self.post("images/edits", &req).await
     }
 
     pub async fn image_variation(
         &self,
         req: ImageVariationRequest,
-    ) -> Result<ImageVariationResponse, APIError> {
+    ) -> Result<CallResponse<ImageVariationResponse>, APIError> {
         self.post("images/variations", &req).await
     }
 
-    pub async fn embedding(&self, req: EmbeddingRequest) -> Result<EmbeddingResponse, APIError> {
+    pub async fn embedding(
+        &self,
+        req: EmbeddingRequest,
+    ) -> Result<CallResponse<EmbeddingResponse>, APIError> {
         self.post("embeddings", &req).await
     }
 
-    pub async fn file_list(&self) -> Result<FileListResponse, APIError> {
+    pub async fn file_list(&self) -> Result<CallResponse<FileListResponse>, APIError> {
         self.get("files").await
     }
 
     pub async fn upload_file(
         &self,
         req: FileUploadRequest,
-    ) -> Result<FileUploadResponse, APIError> {
+    ) -> Result<CallResponse<FileUploadResponse>, APIError> {
         let form = Self::create_form(&req, "file")?;
         self.post_form("files", form).await
     }
@@ -346,105 +344,116 @@ impl OpenAIClient {
     pub async fn delete_file(
         &self,
         req: FileDeleteRequest,
-    ) -> Result<FileDeleteResponse, APIError> {
+    ) -> Result<CallResponse<FileDeleteResponse>, APIError> {
         self.delete(&format!("files/{}", req.file_id)).await
     }
 
-    pub async fn retrieve_file(&self, file_id: String) -> Result<FileRetrieveResponse, APIError> {
-        self.get(&format!("files/{}", file_id)).await
+    pub async fn retrieve_file(
+        &self,
+        file_id: String,
+    ) -> Result<CallResponse<FileRetrieveResponse>, APIError> {
+        self.get(&format!("files/{file_id}")).await
     }
 
     pub async fn retrieve_file_content(&self, file_id: String) -> Result<Bytes, APIError> {
-        self.get_raw(&format!("files/{}/content", file_id)).await
+        self.get_raw(&format!("files/{file_id}/content")).await
     }
 
     pub async fn chat_completion(
         &self,
         req: ChatCompletionRequest,
-    ) -> Result<ChatCompletionResponse, APIError> {
+    ) -> Result<CallResponse<ChatCompletionResponse>, APIError> {
         self.post("chat/completions", &req).await
     }
 
     pub async fn chat_completion_stream(
         &self,
-        req: ChatCompletionRequest,
-    ) -> Result<impl Stream<Item = Result<ChatCompletionResponse, Error>>, Error> {
-        //self.stream("/chat/completions", req).await
-        let stream = self.event_stream("/chat/completions", req).await?;
-        let stream = stream.map(|x| {
-            match x {
-                Ok(x) => {
-                    let data = x.data.clone();
-                    if data == "[DONE]" {
-                        Ok(ChatCompletionResponse {
-                            id: "".to_string(),
-                            object: "".to_string(),
-                            created: 0,
-                            model: "".to_string(),
-                            choices: vec![
-                                ChatCompletionChoice {
-                                    index: 0,
-                                    message: None,
-                                    delta: None,
-                                    finish_reason: Some(FinishReason::stop),
-                                    finish_details: None
-                                }
-                            ],
-                            usage: None,
-                            system_fingerprint: None,
-                            headers: None,
-                        })
-                    } else if data.clone().starts_with("{") {
-                        let result = serde_json::from_str::<ChatCompletionResponse>(&data.clone());
-                        match result {
-                            Ok(result) => {
-                                Ok(result)
-                            },
-                            Err(err) => {
-                                Err(anyhow!(format!("Error parsing:\n\n{}\n\n{}", data.clone(), err)))
-                            }
-                        }
-                    } else {
-                        Err(anyhow!("Invalid result!"))
-                    }
-                }
-                Err(err) => {
-                    Err(anyhow!(err))
-                }
-            }
-        });
-        Ok(stream)
-    }
-    
-    // TODO: Test
-    pub async fn create_speech_stream(
-        &self,
-        req: AudioSpeechRequest,
-    ) -> Result<impl Stream<Item = Result<Bytes, Error>>> {
-        let stream = self.byte_stream("/audio/speech", req).await?;
-        Ok(stream)
-    }
+        req: ChatCompletionStreamRequest,
+    ) -> Result<impl Stream<Item = ChatCompletionStreamResponse>, APIError> {
+        let mut payload = to_value(&req).map_err(|err| APIError::CustomError {
+            message: format!("Failed to serialize request: {}", err),
+        })?;
 
-    pub async fn create_speech(
-        &self,
-        req: AudioSpeechRequest,
-    ) -> Result<Bytes> {
-        let res = self.post_bytes("/audio/speech", &req).await?;
-        Ok(res)
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("stream".into(), Value::Bool(true));
+        }
+
+        let request = self.build_request(Method::POST, "chat/completions").await;
+        let request = request.json(&payload);
+        let response = request.send().await?;
+
+        if response.status().is_success() {
+            Ok(ChatCompletionStream {
+                response: Box::pin(response.bytes_stream()),
+                buffer: String::new(),
+                first_chunk: true,
+            })
+        } else {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| String::from("Unknown error"));
+
+            Err(APIError::CustomError {
+                message: error_text,
+            })
+        }
     }
 
     pub async fn audio_transcription(
         &self,
         req: AudioTranscriptionRequest,
-    ) -> Result<AudioTranscriptionResponse, APIError> {
-        let form = Self::create_form(&req, "file")?;
+    ) -> Result<CallResponse<AudioTranscriptionResponse>, APIError> {
+        // https://platform.openai.com/docs/api-reference/audio/createTranscription#audio-createtranscription-response_format
+        if let Some(response_format) = &req.response_format {
+            if response_format != "json" && response_format != "verbose_json" {
+                return Err(APIError::CustomError {
+                    message: "response_format must be either 'json' or 'verbose_json' please use audio_transcription_raw".to_string(),
+                });
+            }
+        }
+        let form: Form;
+        if req.clone().file.is_some() {
+            form = Self::create_form(&req, "file")?;
+        } else if let Some(bytes) = req.clone().bytes {
+            form = Self::create_form_from_bytes(&req, bytes)?;
+        } else {
+            return Err(APIError::CustomError {
+                message: "Either file or bytes must be provided".to_string(),
+            });
+        }
         self.post_form("audio/transcriptions", form).await
+    }
+
+    pub async fn audio_transcription_raw(
+        &self,
+        req: AudioTranscriptionRequest,
+    ) -> Result<Bytes, APIError> {
+        // https://platform.openai.com/docs/api-reference/audio/createTranscription#audio-createtranscription-response_format
+        if let Some(response_format) = &req.response_format {
+            if response_format != "text" && response_format != "srt" && response_format != "vtt" {
+                return Err(APIError::CustomError {
+                    message: "response_format must be either 'text', 'srt' or 'vtt', please use audio_transcription".to_string(),
+                });
+            }
+        }
+        let form: Form;
+        if req.clone().file.is_some() {
+            form = Self::create_form(&req, "file")?;
+        } else if let Some(bytes) = req.clone().bytes {
+            form = Self::create_form_from_bytes(&req, bytes)?;
+        } else {
+            return Err(APIError::CustomError {
+                message: "Either file or bytes must be provided".to_string(),
+            });
+        }
+        self.post_form_raw("audio/transcriptions", form).await
     }
 
     pub async fn audio_translation(
         &self,
         req: AudioTranslationRequest,
-    ) -> Result<AudioTranslationResponse, APIError> {
+    ) -> Result<CallResponse<AudioTranslationResponse>, APIError> {
         let form = Self::create_form(&req, "file")?;
         self.post_form("audio/translations", form).await
     }
@@ -452,7 +461,7 @@ impl OpenAIClient {
     pub async fn audio_speech(
         &self,
         req: AudioSpeechRequest,
-    ) -> Result<AudioSpeechResponse, APIError> {
+    ) -> Result<CallResponse<AudioSpeechResponse>, APIError> {
         let request = self.build_request(Method::POST, "audio/speech").await;
         let request = request.json(&req);
         let response = request.send().await?;
@@ -485,29 +494,29 @@ impl OpenAIClient {
             }
         }
 
-        Ok(AudioSpeechResponse {
-            result: true,
-            headers: Some(headers),
+        Ok(CallResponse {
+            headers,
+            inner: AudioSpeechResponse { result: true },
         })
     }
 
     pub async fn create_fine_tuning_job(
         &self,
         req: CreateFineTuningJobRequest,
-    ) -> Result<FineTuningJobObject, APIError> {
+    ) -> Result<CallResponse<FineTuningJobObject>, APIError> {
         self.post("fine_tuning/jobs", &req).await
     }
 
     pub async fn list_fine_tuning_jobs(
         &self,
-    ) -> Result<FineTuningPagination<FineTuningJobObject>, APIError> {
+    ) -> Result<CallResponse<FineTuningPagination<FineTuningJobObject>>, APIError> {
         self.get("fine_tuning/jobs").await
     }
 
     pub async fn list_fine_tuning_job_events(
         &self,
         req: ListFineTuningJobEventsRequest,
-    ) -> Result<FineTuningPagination<FineTuningJobEvent>, APIError> {
+    ) -> Result<CallResponse<FineTuningPagination<FineTuningJobEvent>>, APIError> {
         self.get(&format!(
             "fine_tuning/jobs/{}/events",
             req.fine_tuning_job_id
@@ -518,7 +527,7 @@ impl OpenAIClient {
     pub async fn retrieve_fine_tuning_job(
         &self,
         req: RetrieveFineTuningJobRequest,
-    ) -> Result<FineTuningJobObject, APIError> {
+    ) -> Result<CallResponse<FineTuningJobObject>, APIError> {
         self.get(&format!("fine_tuning/jobs/{}", req.fine_tuning_job_id))
             .await
     }
@@ -526,7 +535,7 @@ impl OpenAIClient {
     pub async fn cancel_fine_tuning_job(
         &self,
         req: CancelFineTuningJobRequest,
-    ) -> Result<FineTuningJobObject, APIError> {
+    ) -> Result<CallResponse<FineTuningJobObject>, APIError> {
         self.post(
             &format!("fine_tuning/jobs/{}/cancel", req.fine_tuning_job_id),
             &req,
@@ -537,35 +546,37 @@ impl OpenAIClient {
     pub async fn create_moderation(
         &self,
         req: CreateModerationRequest,
-    ) -> Result<CreateModerationResponse, APIError> {
+    ) -> Result<CallResponse<CreateModerationResponse>, APIError> {
         self.post("moderations", &req).await
     }
 
     pub async fn create_assistant(
         &self,
         req: AssistantRequest,
-    ) -> Result<AssistantObject, APIError> {
+    ) -> Result<CallResponse<AssistantObject>, APIError> {
         self.post("assistants", &req).await
     }
 
     pub async fn retrieve_assistant(
         &self,
         assistant_id: String,
-    ) -> Result<AssistantObject, APIError> {
-        self.get(&format!("assistants/{}", assistant_id)).await
+    ) -> Result<CallResponse<AssistantObject>, APIError> {
+        self.get(&format!("assistants/{assistant_id}")).await
     }
 
     pub async fn modify_assistant(
         &self,
         assistant_id: String,
         req: AssistantRequest,
-    ) -> Result<AssistantObject, APIError> {
-        self.post(&format!("assistants/{}", assistant_id), &req)
-            .await
+    ) -> Result<CallResponse<AssistantObject>, APIError> {
+        self.post(&format!("assistants/{assistant_id}"), &req).await
     }
 
-    pub async fn delete_assistant(&self, assistant_id: String) -> Result<DeletionStatus, APIError> {
-        self.delete(&format!("assistants/{}", assistant_id)).await
+    pub async fn delete_assistant(
+        &self,
+        assistant_id: String,
+    ) -> Result<CallResponse<common::DeletionStatus>, APIError> {
+        self.delete(&format!("assistants/{assistant_id}")).await
     }
 
     pub async fn list_assistant(
@@ -574,7 +585,7 @@ impl OpenAIClient {
         order: Option<String>,
         after: Option<String>,
         before: Option<String>,
-    ) -> Result<ListAssistant, APIError> {
+    ) -> Result<CallResponse<ListAssistant>, APIError> {
         let url = Self::query_params(limit, order, after, before, "assistants".to_string());
         self.get(&url).await
     }
@@ -583,8 +594,8 @@ impl OpenAIClient {
         &self,
         assistant_id: String,
         req: AssistantFileRequest,
-    ) -> Result<AssistantFileObject, APIError> {
-        self.post(&format!("assistants/{}/files", assistant_id), &req)
+    ) -> Result<CallResponse<AssistantFileObject>, APIError> {
+        self.post(&format!("assistants/{assistant_id}/files"), &req)
             .await
     }
 
@@ -592,8 +603,8 @@ impl OpenAIClient {
         &self,
         assistant_id: String,
         file_id: String,
-    ) -> Result<AssistantFileObject, APIError> {
-        self.get(&format!("assistants/{}/files/{}", assistant_id, file_id))
+    ) -> Result<CallResponse<AssistantFileObject>, APIError> {
+        self.get(&format!("assistants/{assistant_id}/files/{file_id}"))
             .await
     }
 
@@ -601,8 +612,8 @@ impl OpenAIClient {
         &self,
         assistant_id: String,
         file_id: String,
-    ) -> Result<DeletionStatus, APIError> {
-        self.delete(&format!("assistants/{}/files/{}", assistant_id, file_id))
+    ) -> Result<CallResponse<common::DeletionStatus>, APIError> {
+        self.delete(&format!("assistants/{assistant_id}/files/{file_id}"))
             .await
     }
 
@@ -613,43 +624,52 @@ impl OpenAIClient {
         order: Option<String>,
         after: Option<String>,
         before: Option<String>,
-    ) -> Result<ListAssistantFile, APIError> {
+    ) -> Result<CallResponse<ListAssistantFile>, APIError> {
         let url = Self::query_params(
             limit,
             order,
             after,
             before,
-            format!("assistants/{}/files", assistant_id),
+            format!("assistants/{assistant_id}/files"),
         );
         self.get(&url).await
     }
 
-    pub async fn create_thread(&self, req: CreateThreadRequest) -> Result<ThreadObject, APIError> {
+    pub async fn create_thread(
+        &self,
+        req: CreateThreadRequest,
+    ) -> Result<CallResponse<ThreadObject>, APIError> {
         self.post("threads", &req).await
     }
 
-    pub async fn retrieve_thread(&self, thread_id: String) -> Result<ThreadObject, APIError> {
-        self.get(&format!("threads/{}", thread_id)).await
+    pub async fn retrieve_thread(
+        &self,
+        thread_id: String,
+    ) -> Result<CallResponse<ThreadObject>, APIError> {
+        self.get(&format!("threads/{thread_id}")).await
     }
 
     pub async fn modify_thread(
         &self,
         thread_id: String,
         req: ModifyThreadRequest,
-    ) -> Result<ThreadObject, APIError> {
-        self.post(&format!("threads/{}", thread_id), &req).await
+    ) -> Result<CallResponse<ThreadObject>, APIError> {
+        self.post(&format!("threads/{thread_id}"), &req).await
     }
 
-    pub async fn delete_thread(&self, thread_id: String) -> Result<DeletionStatus, APIError> {
-        self.delete(&format!("threads/{}", thread_id)).await
+    pub async fn delete_thread(
+        &self,
+        thread_id: String,
+    ) -> Result<CallResponse<common::DeletionStatus>, APIError> {
+        self.delete(&format!("threads/{thread_id}")).await
     }
 
     pub async fn create_message(
         &self,
         thread_id: String,
         req: CreateMessageRequest,
-    ) -> Result<MessageObject, APIError> {
-        self.post(&format!("threads/{}/messages", thread_id), &req)
+    ) -> Result<CallResponse<MessageObject>, APIError> {
+        self.post(&format!("threads/{thread_id}/messages"), &req)
             .await
     }
 
@@ -657,8 +677,8 @@ impl OpenAIClient {
         &self,
         thread_id: String,
         message_id: String,
-    ) -> Result<MessageObject, APIError> {
-        self.get(&format!("threads/{}/messages/{}", thread_id, message_id))
+    ) -> Result<CallResponse<MessageObject>, APIError> {
+        self.get(&format!("threads/{thread_id}/messages/{message_id}"))
             .await
     }
 
@@ -667,16 +687,16 @@ impl OpenAIClient {
         thread_id: String,
         message_id: String,
         req: ModifyMessageRequest,
-    ) -> Result<MessageObject, APIError> {
-        self.post(
-            &format!("threads/{}/messages/{}", thread_id, message_id),
-            &req,
-        )
-        .await
+    ) -> Result<CallResponse<MessageObject>, APIError> {
+        self.post(&format!("threads/{thread_id}/messages/{message_id}"), &req)
+            .await
     }
 
-    pub async fn list_messages(&self, thread_id: String) -> Result<ListMessage, APIError> {
-        self.get(&format!("threads/{}/messages", thread_id)).await
+    pub async fn list_messages(
+        &self,
+        thread_id: String,
+    ) -> Result<CallResponse<ListMessage>, APIError> {
+        self.get(&format!("threads/{thread_id}/messages")).await
     }
 
     pub async fn retrieve_message_file(
@@ -684,10 +704,9 @@ impl OpenAIClient {
         thread_id: String,
         message_id: String,
         file_id: String,
-    ) -> Result<MessageFileObject, APIError> {
+    ) -> Result<CallResponse<MessageFileObject>, APIError> {
         self.get(&format!(
-            "threads/{}/messages/{}/files/{}",
-            thread_id, message_id, file_id
+            "threads/{thread_id}/messages/{message_id}/files/{file_id}"
         ))
         .await
     }
@@ -700,13 +719,13 @@ impl OpenAIClient {
         order: Option<String>,
         after: Option<String>,
         before: Option<String>,
-    ) -> Result<ListMessageFile, APIError> {
+    ) -> Result<CallResponse<ListMessageFile>, APIError> {
         let url = Self::query_params(
             limit,
             order,
             after,
             before,
-            format!("threads/{}/messages/{}/files", thread_id, message_id),
+            format!("threads/{thread_id}/messages/{message_id}/files"),
         );
         self.get(&url).await
     }
@@ -715,17 +734,16 @@ impl OpenAIClient {
         &self,
         thread_id: String,
         req: CreateRunRequest,
-    ) -> Result<RunObject, APIError> {
-        self.post(&format!("threads/{}/runs", thread_id), &req)
-            .await
+    ) -> Result<CallResponse<RunObject>, APIError> {
+        self.post(&format!("threads/{thread_id}/runs"), &req).await
     }
 
     pub async fn retrieve_run(
         &self,
         thread_id: String,
         run_id: String,
-    ) -> Result<RunObject, APIError> {
-        self.get(&format!("threads/{}/runs/{}", thread_id, run_id))
+    ) -> Result<CallResponse<RunObject>, APIError> {
+        self.get(&format!("threads/{thread_id}/runs/{run_id}"))
             .await
     }
 
@@ -734,8 +752,8 @@ impl OpenAIClient {
         thread_id: String,
         run_id: String,
         req: ModifyRunRequest,
-    ) -> Result<RunObject, APIError> {
-        self.post(&format!("threads/{}/runs/{}", thread_id, run_id), &req)
+    ) -> Result<CallResponse<RunObject>, APIError> {
+        self.post(&format!("threads/{thread_id}/runs/{run_id}"), &req)
             .await
     }
 
@@ -746,13 +764,13 @@ impl OpenAIClient {
         order: Option<String>,
         after: Option<String>,
         before: Option<String>,
-    ) -> Result<ListRun, APIError> {
+    ) -> Result<CallResponse<ListRun>, APIError> {
         let url = Self::query_params(
             limit,
             order,
             after,
             before,
-            format!("threads/{}/runs", thread_id),
+            format!("threads/{thread_id}/runs"),
         );
         self.get(&url).await
     }
@@ -761,9 +779,9 @@ impl OpenAIClient {
         &self,
         thread_id: String,
         run_id: String,
-    ) -> Result<RunObject, APIError> {
+    ) -> Result<CallResponse<RunObject>, APIError> {
         self.post(
-            &format!("threads/{}/runs/{}/cancel", thread_id, run_id),
+            &format!("threads/{thread_id}/runs/{run_id}/cancel"),
             &ModifyRunRequest::default(),
         )
         .await
@@ -772,7 +790,7 @@ impl OpenAIClient {
     pub async fn create_thread_and_run(
         &self,
         req: CreateThreadAndRunRequest,
-    ) -> Result<RunObject, APIError> {
+    ) -> Result<CallResponse<RunObject>, APIError> {
         self.post("threads/runs", &req).await
     }
 
@@ -781,10 +799,9 @@ impl OpenAIClient {
         thread_id: String,
         run_id: String,
         step_id: String,
-    ) -> Result<RunStepObject, APIError> {
+    ) -> Result<CallResponse<RunStepObject>, APIError> {
         self.get(&format!(
-            "threads/{}/runs/{}/steps/{}",
-            thread_id, run_id, step_id
+            "threads/{thread_id}/runs/{run_id}/steps/{step_id}"
         ))
         .await
     }
@@ -797,28 +814,37 @@ impl OpenAIClient {
         order: Option<String>,
         after: Option<String>,
         before: Option<String>,
-    ) -> Result<ListRunStep, APIError> {
+    ) -> Result<CallResponse<ListRunStep>, APIError> {
         let url = Self::query_params(
             limit,
             order,
             after,
             before,
-            format!("threads/{}/runs/{}/steps", thread_id, run_id),
+            format!("threads/{thread_id}/runs/{run_id}/steps"),
         );
         self.get(&url).await
     }
 
-    pub async fn create_batch(&self, req: CreateBatchRequest) -> Result<BatchResponse, APIError> {
+    pub async fn create_batch(
+        &self,
+        req: CreateBatchRequest,
+    ) -> Result<CallResponse<BatchResponse>, APIError> {
         self.post("batches", &req).await
     }
 
-    pub async fn retrieve_batch(&self, batch_id: String) -> Result<BatchResponse, APIError> {
-        self.get(&format!("batches/{}", batch_id)).await
+    pub async fn retrieve_batch(
+        &self,
+        batch_id: String,
+    ) -> Result<CallResponse<BatchResponse>, APIError> {
+        self.get(&format!("batches/{batch_id}")).await
     }
 
-    pub async fn cancel_batch(&self, batch_id: String) -> Result<BatchResponse, APIError> {
+    pub async fn cancel_batch(
+        &self,
+        batch_id: String,
+    ) -> Result<CallResponse<BatchResponse>, APIError> {
         self.post(
-            &format!("batches/{}/cancel", batch_id),
+            &format!("batches/{batch_id}/cancel"),
             &common::EmptyRequestBody {},
         )
         .await
@@ -828,9 +854,142 @@ impl OpenAIClient {
         &self,
         after: Option<String>,
         limit: Option<i64>,
-    ) -> Result<ListBatchResponse, APIError> {
+    ) -> Result<CallResponse<ListBatchResponse>, APIError> {
         let url = Self::query_params(limit, None, after, None, "batches".to_string());
         self.get(&url).await
+    }
+
+    // Responses API
+    pub async fn create_response(
+        &self,
+        req: CreateResponseRequest,
+    ) -> Result<CallResponse<ResponseObject>, APIError> {
+        self.post("responses", &req).await
+    }
+
+    pub async fn create_response_stream(
+        &self,
+        req: CreateResponseStreamRequest,
+    ) -> Result<impl Stream<Item = ResponseStreamResponse>, APIError> {
+        let mut payload = to_value(&req).map_err(|err| APIError::CustomError {
+            message: format!("Failed to serialize request: {}", err),
+        })?;
+
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("stream".into(), Value::Bool(true));
+        }
+
+        let request = self.build_request(Method::POST, "responses").await;
+        let request = request.json(&payload);
+        let response = request.send().await?;
+
+        if response.status().is_success() {
+            Ok(ResponseStream {
+                response: Box::pin(response.bytes_stream()),
+                buffer: String::new(),
+                first_chunk: true,
+            })
+        } else {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| String::from("Unknown error"));
+
+            Err(APIError::CustomError {
+                message: error_text,
+            })
+        }
+    }
+
+    pub async fn retrieve_response(
+        &self,
+        response_id: String,
+    ) -> Result<CallResponse<ResponseObject>, APIError> {
+        self.get(&format!("responses/{response_id}")).await
+    }
+
+    pub async fn delete_response(
+        &self,
+        response_id: String,
+    ) -> Result<CallResponse<common::DeletionStatus>, APIError> {
+        self.delete(&format!("responses/{response_id}")).await
+    }
+
+    pub async fn cancel_response(
+        &self,
+        response_id: String,
+    ) -> Result<CallResponse<ResponseObject>, APIError> {
+        self.post(
+            &format!("responses/{response_id}/cancel"),
+            &common::EmptyRequestBody {},
+        )
+        .await
+    }
+
+    pub async fn list_response_input_items(
+        &self,
+        response_id: String,
+        after: Option<String>,
+        limit: Option<i64>,
+        order: Option<String>,
+    ) -> Result<CallResponse<ListResponses>, APIError> {
+        let mut url = format!("responses/{}/input_items", response_id);
+        let mut params = vec![];
+        if let Some(after) = after {
+            params.push(format!("after={}", after));
+        }
+        if let Some(limit) = limit {
+            params.push(format!("limit={}", limit));
+        }
+        if let Some(order) = order {
+            params.push(format!("order={}", order));
+        }
+        if !params.is_empty() {
+            url = format!("{}?{}", url, params.join("&"));
+        }
+        self.get(&url).await
+    }
+
+    pub async fn count_response_input_tokens(
+        &self,
+        req: CountTokensRequest,
+    ) -> Result<CallResponse<CountTokensResponse>, APIError> {
+        self.post("responses/input_tokens", &req).await
+    }
+
+    pub async fn list_models(&self) -> Result<CallResponse<ModelsResponse>, APIError> {
+        self.get("models").await
+    }
+
+    pub async fn retrieve_model(
+        &self,
+        model_id: String,
+    ) -> Result<CallResponse<ModelResponse>, APIError> {
+        self.get(&format!("models/{model_id}")).await
+    }
+
+    pub async fn delete_model(
+        &self,
+        model_id: String,
+    ) -> Result<CallResponse<common::DeletionStatus>, APIError> {
+        self.delete(&format!("models/{model_id}")).await
+    }
+
+    fn build_url_with_preserved_query(&self, path: &str) -> Result<String, url::ParseError> {
+        let (base, query_opt) = match self.api_endpoint.split_once('?') {
+            Some((b, q)) => (b.trim_end_matches('/'), Some(q)),
+            None => (self.api_endpoint.trim_end_matches('/'), None),
+        };
+
+        let full_path = format!("{}/{}", base, path.trim_start_matches('/'));
+        let mut url = Url::parse(&full_path)?;
+
+        if let Some(query) = query_opt {
+            for (k, v) in url::form_urlencoded::parse(query.as_bytes()) {
+                url.query_pairs_mut().append_pair(&k, &v);
+            }
+        }
+        Ok(url.to_string())
     }
 
     fn query_params(
@@ -842,16 +1001,16 @@ impl OpenAIClient {
     ) -> String {
         let mut params = vec![];
         if let Some(limit) = limit {
-            params.push(format!("limit={}", limit));
+            params.push(format!("limit={limit}"));
         }
         if let Some(order) = order {
-            params.push(format!("order={}", order));
+            params.push(format!("order={order}"));
         }
         if let Some(after) = after {
-            params.push(format!("after={}", after));
+            params.push(format!("after={after}"));
         }
         if let Some(before) = before {
-            params.push(format!("before={}", before));
+            params.push(format!("before={before}"));
         }
         if !params.is_empty() {
             url = format!("{}?{}", url, params.join("&"));
@@ -879,7 +1038,7 @@ impl OpenAIClient {
             map.get(file_field)
                 .and_then(|v| v.as_str())
                 .ok_or(APIError::CustomError {
-                    message: format!("Field '{}' not found or not a string", file_field),
+                    message: format!("Field '{file_field}' not found or not a string"),
                 })?
         } else {
             return Err(APIError::CustomError {
@@ -920,6 +1079,38 @@ impl OpenAIClient {
                         }
                         _ => {}
                     }
+                }
+            }
+        }
+
+        Ok(form)
+    }
+
+    fn create_form_from_bytes<T>(req: &T, bytes: Vec<u8>) -> Result<Form, APIError>
+    where
+        T: Serialize,
+    {
+        let json = match serde_json::to_value(req) {
+            Ok(json) => json,
+            Err(e) => {
+                return Err(APIError::CustomError {
+                    message: e.to_string(),
+                })
+            }
+        };
+
+        let mut form = Form::new().part("file", Part::bytes(bytes.clone()).file_name("file.mp3"));
+
+        if let Value::Object(map) = json {
+            for (key, value) in map.into_iter() {
+                match value {
+                    Value::String(s) => {
+                        form = form.text(key, s);
+                    }
+                    Value::Number(n) => {
+                        form = form.text(key, n.to_string());
+                    }
+                    _ => {}
                 }
             }
         }

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::types;
 use crate::impl_builder_methods;
 
 #[derive(Debug, Serialize, Clone)]
@@ -56,11 +57,10 @@ pub struct AssistantObject {
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instructions: Option<String>,
-    pub tools: Vec<HashMap<String, String>>,
+    pub tools: Vec<types::Tools>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_resources: Option<ToolResource>,
     pub metadata: Option<HashMap<String, String>>,
-    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -96,18 +96,9 @@ pub struct VectorStores {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct DeletionStatus {
-    pub id: String,
-    pub object: String,
-    pub deleted: bool,
-    pub headers: Option<HashMap<String, String>>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
 pub struct ListAssistant {
     pub object: String,
     pub data: Vec<AssistantObject>,
-    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -121,12 +112,10 @@ pub struct AssistantFileObject {
     pub object: String,
     pub created_at: i64,
     pub assistant_id: String,
-    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ListAssistantFile {
     pub object: String,
     pub data: Vec<AssistantFileObject>,
-    pub headers: Option<HashMap<String, String>>,
 }

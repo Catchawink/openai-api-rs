@@ -1,16 +1,19 @@
 use openai_api_rs::v1::api::OpenAIClient;
 use openai_api_rs::v1::chat_completion::chat_completion::ChatCompletionRequest;
 use openai_api_rs::v1::chat_completion::{self};
-use openai_api_rs::v1::common::GPT5_4;
+use openai_api_rs::v1::common::GPT4_O_MINI;
 use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let api_key = env::var("OPENAI_API_KEY").unwrap().to_string();
-    let client = OpenAIClient::builder().with_api_key(api_key).build()?;
+    let api_key = env::var("OPENROUTER_API_KEY").unwrap().to_string();
+    let client = OpenAIClient::builder()
+        .with_endpoint("https://openrouter.ai/api/v1")
+        .with_api_key(api_key)
+        .build()?;
 
-    let mut req = ChatCompletionRequest::new(
-        GPT5_4.to_string(),
+    let req = ChatCompletionRequest::new(
+        GPT4_O_MINI.to_string(),
         vec![chat_completion::ChatCompletionMessage {
             role: chat_completion::MessageRole::user,
             content: chat_completion::Content::Text(String::from("What is bitcoin?")),
@@ -20,17 +23,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }],
     );
 
-    req.reasoning_effort = Some(chat_completion::ReasoningEffort::High);
-
     let result = client.chat_completion(req).await?;
     println!("Content: {:?}", result.inner.choices[0].message.content);
-
-    // print response headers
-    for (key, value) in result.headers.iter() {
-        println!("{}: {:?}", key, value);
-    }
+    println!("Response Headers: {:?}", result.headers);
 
     Ok(())
 }
 
-// OPENAI_API_KEY=xxxx cargo run --package openai-api-rs --example chat_completion
+// OPENROUTER_API_KEY=xxxx cargo run --package openai-api-rs --example openrouter

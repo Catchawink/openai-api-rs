@@ -30,24 +30,33 @@ pub struct Session {
 #[serde(rename_all = "lowercase")]
 pub enum RealtimeVoice {
     Alloy,
-    Shimmer,
+    Ash,
+    Ballad,
+    Coral,
     Echo,
+    Sage,
+    Shimmer,
+    Verse,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum AudioFormat {
     #[serde(rename = "pcm16")]
     PCM16,
-    #[serde(rename = "g711-ulaw")]
+    #[serde(rename = "g711_ulaw")]
     G711ULAW,
-    #[serde(rename = "g711-alaw")]
+    #[serde(rename = "g711_alaw")]
     G711ALAW,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AudioTranscription {
-    pub enabled: bool,
-    pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -128,6 +137,7 @@ pub enum ItemRole {
 pub enum ItemContentType {
     InputText,
     InputAudio,
+    InputImage,
     Text,
     Audio,
 }
@@ -141,6 +151,8 @@ pub struct ItemContent {
     pub audio: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transcript: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -219,7 +231,7 @@ pub enum ResponseStatus {
 #[serde(tag = "type")]
 pub enum ResponseStatusDetail {
     #[serde(rename = "cancelled")]
-    Cancelled,
+    Cancelled { reason: CancelledReason },
     #[serde(rename = "incomplete")]
     Incomplete { reason: IncompleteReason },
     #[serde(rename = "failed")]
@@ -228,8 +240,16 @@ pub enum ResponseStatusDetail {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FailedError {
-    pub code: String,
-    pub message: String,
+    pub code: Option<String>,
+    pub message: Option<String>,
+    pub r#type: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum CancelledReason {
+    TurnDetected,
+    ClientCancelled,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

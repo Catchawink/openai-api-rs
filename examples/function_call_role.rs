@@ -1,6 +1,8 @@
 use openai_api_rs::v1::api::OpenAIClient;
-use openai_api_rs::v1::chat_completion::{self, ChatCompletionRequest};
+use openai_api_rs::v1::chat_completion::chat_completion::ChatCompletionRequest;
+use openai_api_rs::v1::chat_completion::{self};
 use openai_api_rs::v1::common::GPT4_O;
+use openai_api_rs::v1::types;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::{env, vec};
@@ -16,13 +18,14 @@ fn get_coin_price(coin: &str) -> f64 {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = OpenAIClient::new(env::var("OPENAI_API_KEY").unwrap().to_string());
+    let api_key = env::var("OPENAI_API_KEY").unwrap().to_string();
+    let client = OpenAIClient::builder().with_api_key(api_key).build()?;
 
     let mut properties = HashMap::new();
     properties.insert(
         "coin".to_string(),
-        Box::new(chat_completion::JSONSchemaDefine {
-            schema_type: Some(chat_completion::JSONSchemaType::String),
+        Box::new(types::JSONSchemaDefine {
+            schema_type: Some(types::JSONSchemaType::String),
             description: Some("The cryptocurrency to get the price of".to_string()),
             ..Default::default()
         }),
@@ -40,11 +43,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .tools(vec![chat_completion::Tool {
         r#type: chat_completion::ToolType::Function,
-        function: chat_completion::Function {
+        function: types::Function {
             name: String::from("get_coin_price"),
             description: Some(String::from("Get the price of a cryptocurrency")),
-            parameters: chat_completion::FunctionParameters {
-                schema_type: chat_completion::JSONSchemaType::Object,
+            parameters: types::FunctionParameters {
+                schema_type: types::JSONSchemaType::Object,
                 properties: Some(properties),
                 required: Some(vec![String::from("coin")]),
             },
@@ -53,14 +56,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let result = client.chat_completion(req).await?;
 
-    match result.choices[0].finish_reason {
+    match result.inner.choices[0].finish_reason {
         None => {
             println!("No finish_reason");
-            println!("{:?}", result.choices[0].message.as_ref().unwrap().content);
+            println!("{:?}", result.inner.choices[0].message.content);
         }
         Some(chat_completion::FinishReason::stop) => {
             println!("Stop");
-            println!("{:?}", result.choices[0].message.as_ref().unwrap().content);
+            println!("{:?}", result.inner.choices[0].message.content);
         }
         Some(chat_completion::FinishReason::length) => {
             println!("Length");
@@ -71,15 +74,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             struct Currency {
                 coin: String,
             }
-            let tool_calls = result.choices[0].message.as_ref().unwrap().tool_calls.as_ref().unwrap();
+            let tool_calls = result.inner.choices[0].message.tool_calls.as_ref().unwrap();
             for tool_call in tool_calls {
                 let function_call = &tool_call.function;
                 let arguments = function_call.arguments.clone().unwrap();
                 let c: Currency = serde_json::from_str(&arguments)?;
                 let coin = c.coin;
-                println!("coin: {}", coin);
+                println!("coin: {coin}");
                 let price = get_coin_price(&coin);
-                println!("price: {}", price);
+                println!("price: {price}");
 
                 let req = ChatCompletionRequest::new(
                     GPT4_O.to_string(),
@@ -97,7 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             role: chat_completion::MessageRole::function,
                             content: chat_completion::Content::Text({
                                 let price = get_coin_price(&coin);
-                                format!("{{\"price\": {}}}", price)
+                                format!("{{\"price\": {price}}}")
                             }),
                             name: Some(String::from("get_coin_price")),
                             tool_calls: None,
@@ -107,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
 
                 let result = client.chat_completion(req).await?;
-                println!("{:?}", result.choices[0].message.as_ref().unwrap().content);
+                println!("{:?}", result.inner.choices[0].message.content);
             }
         }
         Some(chat_completion::FinishReason::content_filter) => {

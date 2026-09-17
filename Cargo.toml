@@ -1,6 +1,6 @@
 [package]
 name = "openai-api-rs"
-version = "5.0.11"
+version = "10.0.1"
 edition = "2021"
 authors = ["Dongri Jin <dongrium@gmail.com>"]
 license = "MIT"
@@ -20,13 +20,13 @@ base64 = "0.22.1"
 
 [features]
 default = ["default-tls"]
-rustls = ["reqwest/rustls-tls"]
-default-tls = ["reqwest/default-tls"]
+rustls = ["reqwest/rustls-tls", "tokio-tungstenite/rustls-tls-webpki-roots"]
+default-tls = ["reqwest/default-tls", "tokio-tungstenite/native-tls"]
 
 [dependencies.reqwest]
 version = "0.12"
 default-features = false
-features = ["charset", "http2", "json", "stream", "multipart", "socks"]
+features = ["charset", "http2", "json", "multipart", "socks", "stream"]
 
 [dependencies.tokio]
 version = "1.32.0"
@@ -43,9 +43,12 @@ version = "1"
 version = "1.7.1"
 
 [dependencies.tokio-tungstenite]
-version = "0.24.0"
-features = ["connect", "native-tls"]
+version = "0.28.0"
+features = ["connect"]
 
 [dependencies.futures-util]
 version = "0.3.31"
 features = ["sink", "std"]
+
+[dependencies.url]
+version = "2.5.4"

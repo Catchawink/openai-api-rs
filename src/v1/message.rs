@@ -68,7 +68,6 @@ pub struct MessageObject {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attachments: Option<Vec<Attachment>>,
     pub metadata: Option<HashMap<String, String>>,
-    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -101,7 +100,7 @@ pub struct Content {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ContentText {
     pub value: String,
-    pub annotations: Vec<String>,
+    pub annotations: Vec<ContentTextAnnotations>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -111,7 +110,6 @@ pub struct ListMessage {
     pub first_id: String,
     pub last_id: String,
     pub has_more: bool,
-    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -120,7 +118,6 @@ pub struct MessageFileObject {
     pub object: String,
     pub created_at: i64,
     pub message_id: String,
-    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -130,5 +127,39 @@ pub struct ListMessageFile {
     pub first_id: String,
     pub last_id: String,
     pub has_more: bool,
-    pub headers: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum ContentTextAnnotations {
+    FileCitation(ContentTextAnnotationsFileCitationObject),
+    FilePath(ContentTextAnnotationsFilePathObject),
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ContentTextAnnotationsFileCitationObject {
+    pub text: String,
+    pub file_citation: FileCitation,
+    pub start_index: u32,
+    pub end_index: u32,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct FileCitation {
+    pub file_id: String,
+    pub quote: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ContentTextAnnotationsFilePathObject {
+    pub text: String,
+    pub file_path: FilePath,
+    pub start_index: u32,
+    pub end_index: u32,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct FilePath {
+    pub file_id: String,
 }

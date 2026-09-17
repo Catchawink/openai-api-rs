@@ -9,7 +9,8 @@ use std::str;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = OpenAIClient::new(env::var("OPENAI_API_KEY").unwrap().to_string());
+    let api_key = env::var("OPENAI_API_KEY").unwrap().to_string();
+    let client = OpenAIClient::builder().with_api_key(api_key).build()?;
 
     let req = FileUploadRequest::new(
         "examples/data/batch_request.json".to_string(),
@@ -17,9 +18,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let result = client.upload_file(req).await?;
-    println!("File id: {:?}", result.id);
-
-    let input_file_id = result.id;
+    let input_file_id = result.inner.id;
+    println!("File id: {:?}", input_file_id);
     let req = CreateBatchRequest::new(
         input_file_id.clone(),
         "/v1/chat/completions".to_string(),
@@ -27,11 +27,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let result = client.create_batch(req).await?;
-    println!("Batch id: {:?}", result.id);
+    let batch_id = result.inner.id;
+    println!("Batch id: {:?}", batch_id);
 
-    let batch_id = result.id;
     let result = client.retrieve_batch(batch_id.to_string()).await?;
-    println!("Batch status: {:?}", result.status);
+    println!("Batch status: {:?}", result.inner.status);
 
     // sleep 30 seconds
     println!("Sleeping for 30 seconds...");
@@ -39,11 +39,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let result = client.retrieve_batch(batch_id.to_string()).await?;
 
-    let file_id = result.output_file_id.unwrap();
+    let file_id = result.inner.output_file_id.unwrap();
     let result = client.retrieve_file_content(file_id).await?;
     let s = match str::from_utf8(&result) {
         Ok(v) => v.to_string(),
-        Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+        Err(e) => panic!("Invalid UTF-8 sequence: {e}"),
     };
     let json_value: Value = from_str(&s)?;
     let result_json = to_string_pretty(&json_value)?;
