@@ -118,6 +118,7 @@ pub enum ChatCompletionStreamResponse {
     Content(String),
     Reasoning(String),
     ToolCall(Vec<ToolCall>),
+    Usage(crate::v1::common::Usage),
     Done,
 }
 
@@ -180,6 +181,16 @@ where
 
             match serde_json::from_str::<Value>(&data_payload) {
                 Ok(json) => {
+                    if let Some(usage) = json.get("usage") {
+                        if !usage.is_null() {
+                            if let Ok(usage) =
+                                serde_json::from_value::<crate::v1::common::Usage>(usage.clone())
+                            {
+                                return Some(ChatCompletionStreamResponse::Usage(usage));
+                            }
+                        }
+                    }
+
                     if let Some(delta) = json
                         .get("choices")
                         .and_then(|choices| choices.get(0))
