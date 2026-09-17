@@ -1,7 +1,7 @@
 use futures_util::StreamExt;
 use openai_api_rs::v1::api::OpenAIClient;
 use openai_api_rs::v1::chat_completion::chat_completion_stream::{
-    ChatCompletionStreamRequest, ChatCompletionStreamResponse,
+    ChatCompletionStreamRequest, ChatCompletionStreamResponse, StreamOptions,
 };
 use openai_api_rs::v1::chat_completion::{self};
 use openai_api_rs::v1::common::GPT4_O_MINI;
@@ -21,7 +21,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tool_calls: None,
             tool_call_id: None,
         }],
-    );
+    )
+    .stream_options(StreamOptions {
+        include_usage: true,
+    });
 
     let mut result = client.chat_completion_stream(req).await?;
     while let Some(response) = result.next().await {
@@ -34,6 +37,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             ChatCompletionStreamResponse::Content(content) => {
                 println!("Content: {:?}", content);
+            }
+            ChatCompletionStreamResponse::Usage(usage) => {
+                println!("Usage: {:?}", usage);
             }
             ChatCompletionStreamResponse::Done => {
                 println!("Done");
