@@ -12,6 +12,4 @@
     "./Cargo.toml",
   ],
   "editor.wordWrap": "on",
-  "rust-analyzer.cargo.target": "x86_64-pc-windows-msvc",
-  //"rust-analyzer.cargo.target": "x86_64-apple-darwin"
 }

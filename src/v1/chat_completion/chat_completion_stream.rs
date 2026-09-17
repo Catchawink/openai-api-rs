@@ -12,9 +12,16 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StreamOptions {
+    pub include_usage: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ChatCompletionStreamRequest {
     pub model: String,
     pub messages: Vec<ChatCompletionMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -62,6 +69,7 @@ impl ChatCompletionStreamRequest {
         Self {
             model,
             messages,
+            stream_options: None,
             temperature: None,
             top_p: None,
             n: None,
@@ -85,6 +93,7 @@ impl ChatCompletionStreamRequest {
 
 impl_builder_methods!(
     ChatCompletionStreamRequest,
+    stream_options: StreamOptions,
     temperature: f64,
     top_p: f64,
     n: i64,

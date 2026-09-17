@@ -1,10 +1,34 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Usage {
     pub prompt_tokens: i32,
     pub completion_tokens: i32,
     pub total_tokens: i32,
+
+    #[serde(default)]
+    pub prompt_tokens_details: Option<PromptTokensDetails>,
+
+    #[serde(default)]
+    pub completion_tokens_details: Option<CompletionTokensDetails>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct PromptTokensDetails {
+    #[serde(default)]
+    pub cached_tokens: i32,
+
+    #[serde(default)]
+    pub audio_tokens: i32,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct CompletionTokensDetails {
+    #[serde(default)]
+    pub reasoning_tokens: i32,
+
+    #[serde(default)]
+    pub audio_tokens: i32,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -172,7 +172,7 @@ pub struct ChatCompletionMessage {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ChatCompletionMessageForResponse {
-    pub role: Option<MessageRole>,
+    pub role: MessageRole,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -187,9 +187,8 @@ pub struct ChatCompletionMessageForResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChatCompletionChoice {
     pub index: i64,
-    pub message: Option<ChatCompletionMessageForResponse>,
+    pub message: ChatCompletionMessageForResponse,
     pub finish_reason: Option<FinishReason>,
-    pub delta: Option<ChatCompletionMessageForResponse>,
     pub finish_details: Option<FinishDetails>,
 }
 

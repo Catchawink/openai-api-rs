@@ -56,43 +56,10 @@ pub struct FileDeleteResponse {
     pub delete: bool,
 }
 
-#[derive(Debug, Serialize, Clone)]
-pub struct FileRetrieveRequest {
-    pub file_id: String,
-}
-
-impl FileRetrieveRequest {
-    pub fn new(file_id: String) -> Self {
-        Self { file_id }
-    }
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FileRetrieveResponse {
     pub id: String,
-    pub oejct: String,
-    pub bytes: i32,
-    pub created_at: i64,
-    pub filename: String,
-    pub purpose: String,
-    pub headers: Option<HashMap<String, String>>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FileRetrieveContentRequest {
-    pub file_id: String,
-}
-
-impl FileRetrieveContentRequest {
-    pub fn new(file_id: String) -> Self {
-        Self { file_id }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct FileRetrieveContentResponse {
-    pub id: String,
-    pub oejct: String,
+    pub object: String,
     pub bytes: i32,
     pub created_at: i64,
     pub filename: String,
